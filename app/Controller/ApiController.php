@@ -127,14 +127,18 @@ class ApiController{
                 return ['message' => 'Thiếu thông tin người dùng'];
 
             case 'update':
-                $id = $params['id'] ?? null;
                 $google_id = $params['GoogleID'] ?? null;
                 $email = $params['email'] ?? null;
                 $full_name = $params['FullName'] ?? null;
-                if ($this->dataController->UpdateUser($id, $google_id, $email, $full_name)) {
-                    return ['message' => 'Cập nhật thành công'];
+                $phone= $params['Phone'] ?? null;
+                $address= $params['Address'] ?? null;
+                $birthdate= $params['BirthDate'] ?? null;
+                $identitynumber= $params['IdentityNumber'] ?? null;
+                if ($this->dataController->UpdateUser($google_id, $email, $full_name, $phone, $address,$birthdate,$identitynumber)) {
+                    return ['status' => 'success'];
                 }
-                return ['message' => 'Cập nhật thất bại'];
+                
+                return ['status' => 'error'];
 
             case 'delete':
                 $id = $params['id'] ?? null;
