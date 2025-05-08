@@ -20,9 +20,7 @@ if (!class_exists('JwtHandler')) {
                 "exp" => time() + 3600,
                 "data" =>[
                     "GoogleID" => $google_id,
-                    "role" => $role,
-                    "email" => $email,
-                    "FullName" => $full_name
+                    "role" => $role
                 ],
             ]);
 
