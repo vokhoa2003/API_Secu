@@ -55,6 +55,7 @@ class ApiController{
                         }
 
                         // Sau khi chắc chắn user tồn tại trong account, chèn vào user_tokens
+                        $refresh_token = bin2hex(random_bytes(32));
                         $insertResult = $this->modelSQL->Insert('user_tokens', [
                             'google_id' => $google_id,
                             'refresh_token' => $refresh_token,
