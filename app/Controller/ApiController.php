@@ -38,10 +38,10 @@ class ApiController{
                     $email = $params['email'] ?? null;
                     $full_name = $params['FullName'] ?? null;
                     $role = $params['role'] ?? 'customer';
-                    $access_token = $params['access_token'] ?? null;
+                    $refresh_token = $params['refresh_token'] ?? null;
                     $expires_at = $params['expires_at'] ?? null;
 
-                    if ($google_id && $email && $full_name && $access_token && $expires_at) {
+                    if ($google_id && $email && $full_name && $refresh_token && $expires_at) {
                         // Kiểm tra và thêm người dùng vào account trước
                         $user = $this->authController->GetUserIdByGoogleId($google_id);
                         error_log("User found: " . ($user ? print_r($user, true) : 'Null'));
@@ -57,8 +57,8 @@ class ApiController{
                         // Sau khi chắc chắn user tồn tại trong account, chèn vào user_tokens
                         $insertResult = $this->modelSQL->Insert('user_tokens', [
                             'google_id' => $google_id,
-                            'access_token' => $access_token,
-                            'expires_at' => $expires_at
+                            'refresh_token' => $refresh_token,
+                            'expires_at' => date('Y-m-d H:i:s', $expires_at + 7 * 24 * 3600)
                         ]);
                         error_log("Insert user_tokens result: " . ($insertResult ? 'Success' : 'Failed'));
                         if (!$insertResult) {
@@ -142,20 +142,21 @@ class ApiController{
                 }
                 return ['message' => 'Xóa thất bại'];
 
-            case 'get_token':
+            case 'refresh_token':
+                $exp = $params['exp'] ?? null;
                 $google_id = $params['GoogleID'] ?? null;
                 if ($google_id) {
                     $p = new connect;
                     $con = $p->OpenDB();
-                    $stmt = $con->prepare("SELECT access_token FROM user_tokens WHERE google_id = ? AND expires_at > NOW()");
+                    $stmt = $con->prepare("SELECT refresh_token FROM user_tokens WHERE google_id = ?");
                     $stmt->bind_param("s", $google_id);
                     $stmt->execute();
                     $result = $stmt->get_result();
                     $token = $result->fetch_assoc();
                     $p->closeDB();
-
+                    
                     if ($token) {
-                        return ['access_token' => $token['access_token']];
+                        return ['refresh_token' => $token['refresh_token']];
                     }
                     return ['error' => 'Token not found or expired'];
                 }
@@ -169,7 +170,7 @@ class ApiController{
                     return ['error' => 'Không tìm thấy GoogleID'];
                 }
 
-                // Xóa access_token từ bảng user_tokens
+                // Xóa refresh_token từ bảng user_tokens
                 $deleteResult = $this->modelSQL->Delete('user_tokens', "google_id = '$google_id'");
                 error_log("Delete user_tokens result: " . ($deleteResult ? 'Success' : 'Failed'));
 
