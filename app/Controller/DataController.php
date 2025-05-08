@@ -23,12 +23,12 @@ class DataController{
         );
         return $p->Insert("account", $data);
     }
-    public function UpdateUser($id, $google_id, $email, $full_name) {
+    public function UpdateUser($google_id, $email, $full_name, $phone, $address,$birthdate,$identitynumber) {
         $p = new ModelSQL;
         $p_connect = new connect;
         $con = $p_connect->OpenDB();
-        $stmt = $con->prepare("SELECT * FROM account WHERE id = ?");
-        $stmt->bind_param("i", $id);
+        $stmt = $con->prepare("SELECT * FROM account WHERE GoogleID = ?");
+        $stmt->bind_param("i", $google_id);
         $stmt->execute();
         $result = $stmt->get_result();
         $p_connect->closeDB();
@@ -36,16 +36,23 @@ class DataController{
             return false;
         }
         $oldData = mysqli_fetch_assoc($result);
-        $google_id = !empty($google_id) ? $google_id : $oldData['google_id'];
+        $google_id = !empty($google_id) ? $google_id : $oldData['GoogleID'];
         $email = !empty($email) ? $email : $oldData['email'];
-        $full_name = !empty($full_name) ? $full_name : $oldData['full_name'];
+        $full_name = !empty($full_name) ? $full_name : $oldData['FullName'];
+        $birthdate = !empty($birthdate) ? $birthdate : $oldData['BirthDate'];
+        $phone = !empty($phone) ? $phone : $oldData['Phone'];
+        $address = !empty($address) ? $address : $oldData['Address'];
+        $identitynumber = !empty($identitynumber) ? $identitynumber : $oldData['IdentityNumber'];
         $data = array(
-            'GoogleID' => $google_id,
             'email' => $email,
             'FullName' => $full_name,
+            'Phone' => $phone,
+            'Address' => $address,
+            'BirthDate' => $birthdate,
+            'IdentityNumber' => $identitynumber,
             'UpdateDate' => date('Y-m-d H:i:s')
         );
-        return $p->Update("account", $data, "id='$id'");
+        return $p->Update("account", $data, "GoogleID='$google_id'");
     }
     public function DeleteUser($id) {
         $p = new ModelSQL;
