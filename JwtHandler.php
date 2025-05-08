@@ -10,27 +10,28 @@ if (!class_exists('JwtHandler')) {
             $this->secret = $config['secret_key'];
 
         }
-        public function createToken($google_id, $email, $role, $full_name)
-        {
-            $header = json_encode(['typ' => 'JWT', 'alg' => 'HS256']);
-            $payload = json_encode([
-                "iss" => "API_Security",
-                "aud" => "user",
-                "iat" => time(),
-                "exp" => time() + 3600,
-                "data" =>[
-                    "GoogleID" => $google_id,
-                    "role" => $role
-                ],
-            ]);
+        public function createToken($google_id, $role)
+{
+    $header = json_encode(['typ' => 'JWT', 'alg' => 'HS256']);
+    $payload = json_encode([
+        "iss" => "API_Security",
+        "aud" => "user",
+        "iat" => time(),
+        "exp" => time() + 3600,
+        "data" => [
+            "GoogleID" => $google_id,
+            "role" => $role
+        ],
+    ]);
 
-            $headerBase64 = $this->base64UrlEncode($header);
-            $payloadBase64 = $this->base64UrlEncode($payload);
-            $signature = hash_hmac('sha256', "$headerBase64.$payloadBase64", $this->secret, true);
-            $signatureBase64 = $this->base64UrlEncode($signature);
-            
-            return "$headerBase64.$payloadBase64.$signatureBase64";
-        }
+    $headerBase64 = $this->base64UrlEncode($header);
+    $payloadBase64 = $this->base64UrlEncode($payload);
+    $signature = hash_hmac('sha256', "$headerBase64.$payloadBase64", $this->secret, true);
+    $signatureBase64 = $this->base64UrlEncode($signature);
+
+    return "$headerBase64.$payloadBase64.$signatureBase64";
+}
+
 
         public function verifyToken($jwt){
             $parts = explode(".", $jwt);
