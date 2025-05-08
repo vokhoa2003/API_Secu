@@ -38,10 +38,11 @@ class ApiController{
                     $email = $params['email'] ?? null;
                     $full_name = $params['FullName'] ?? null;
                     $role = $params['role'] ?? 'customer';
-                    $refresh_token = $params['refresh_token'] ?? null;
+                    //$refresh_token = $params['refresh_token'] ?? null;
+                    $access_token = $params['access_token'] ?? null;
                     $expires_at = $params['expires_at'] ?? null;
 
-                    if ($google_id && $email && $full_name && $refresh_token && $expires_at) {
+                    if ($google_id && $email && $full_name && $access_token && $expires_at) {
                         // Kiểm tra và thêm người dùng vào account trước
                         $user = $this->authController->GetUserIdByGoogleId($google_id);
                         error_log("User found: " . ($user ? print_r($user, true) : 'Null'));
@@ -55,11 +56,11 @@ class ApiController{
                         }
 
                         // Sau khi chắc chắn user tồn tại trong account, chèn vào user_tokens
-                        $refresh_token = bin2hex(random_bytes(32));
+                        //$refresh_token = bin2hex(random_bytes(32));
                         $insertResult = $this->modelSQL->Insert('user_tokens', [
                             'google_id' => $google_id,
-                            'refresh_token' => $refresh_token,
-                            'expires_at' => date('Y-m-d H:i:s', $expires_at + 7 * 24 * 3600)
+                            'refresh_token' => $access_token,
+                            'expires_at' => $expires_at
                         ]);
                         error_log("Insert user_tokens result: " . ($insertResult ? 'Success' : 'Failed'));
                         if (!$insertResult) {
@@ -159,7 +160,7 @@ class ApiController{
                     $result = $stmt->get_result();
                     $token = $result->fetch_assoc();
                     $p->closeDB();
-                    
+
                     if ($token) {
                         return ['refresh_token' => $token['refresh_token']];
                     }
