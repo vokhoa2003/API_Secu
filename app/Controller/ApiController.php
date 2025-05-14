@@ -20,7 +20,7 @@ class ApiController{
         error_log("Params: " . print_r($params, true));
 
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            if (!isset($params['csrf_token']) || $params['csrf_token'] !== ($_COOKIE['csrf_token'] ?? '')) {
+            if (!isset($params['csrf_token']) ?? '') {
                 http_response_code(403);
                 return ['error' => 'Invalid CSRF token'];
             }
@@ -30,58 +30,59 @@ class ApiController{
             return ['error' => $middlewareResult['error']];
             exit;
         }
+
+        $params = array_merge($params, $middlewareResult ?? []);
         switch($action){
             
             case 'login':
-                case 'login':
-                    $google_id = $params['GoogleID'] ?? null;
-                    $email = $params['email'] ?? null;
-                    $full_name = $params['FullName'] ?? null;
-                    $role = $params['role'] ?? 'customer';
-                    //$refresh_token = $params['refresh_token'] ?? null;
-                    $access_token = $params['access_token'] ?? null;
-                    $expires_at = $params['expires_at'] ?? null;
+                $google_id = $params['GoogleID'] ?? null;
+                $email = $params['email'] ?? null;
+                $full_name = $params['FullName'] ?? null;
+                $role = $params['role'] ?? 'customer';
+                //$refresh_token = $params['refresh_token'] ?? null;
+                $access_token = $params['access_token'] ?? null;
+                $expires_at = $params['expires_at'] ?? null;
 
-                    if ($google_id && $email && $full_name && $access_token && $expires_at) {
-                        // Kiểm tra và thêm người dùng vào account trước
-                        $user = $this->authController->GetUserIdByGoogleId($google_id);
-                        error_log("User found: " . ($user ? print_r($user, true) : 'Null'));
+                if ($google_id && $email && $full_name && $access_token && $expires_at) {
+                    // Kiểm tra và thêm người dùng vào account trước
+                    $user = $this->authController->GetUserIdByGoogleId($google_id);
+                    error_log("User found: " . ($user ? print_r($user, true) : 'Null'));
 
-                        if (!$user) {
-                            $addUserResult = $this->dataController->AddUser($google_id, $email, $full_name, $role);
-                            error_log("Add user result: " . ($addUserResult ? 'Success' : 'Failed'));
-                            if (!$addUserResult) {
-                                return ['error' => 'Thêm người dùng thất bại'];
-                            }
+                    if (!$user) {
+                        $addUserResult = $this->dataController->AddUser($google_id, $email, $full_name, $role);
+                        error_log("Add user result: " . ($addUserResult ? 'Success' : 'Failed'));
+                        if (!$addUserResult) {
+                            return ['error' => 'Thêm người dùng thất bại'];
                         }
-
-                        // Sau khi chắc chắn user tồn tại trong account, chèn vào user_tokens
-                        //$refresh_token = bin2hex(random_bytes(32));
-                        $insertResult = $this->modelSQL->Insert('user_tokens', [
-                            'google_id' => $google_id,
-                            'refresh_token' => $access_token,
-                            'expires_at' => $expires_at
-                        ]);
-                        error_log("Insert user_tokens result: " . ($insertResult ? 'Success' : 'Failed'));
-                        if (!$insertResult) {
-                            return ['error' => 'Lưu access token thất bại'];
-                        }
-
-                        $token = $this->authController->LoginWithGoogle($google_id);
-                        error_log("Token: " . ($token['token'] ?? 'Null'));
-                        if (isset($token['error'])) {
-                            return ['error' => $token['error']];
-                        }
-                        if (!$token['token']) {
-                            return ['error' => 'Tạo token thất bại'];
-                        }
-                        return [
-                            'status' => 'success',
-                            'token' => $token['token'],
-                            'message' => $user ? 'Người dùng đã tồn tại, đăng nhập thành công' : 'Thêm thành công'
-                        ];
                     }
-                    return ['error' => 'Thiếu thông tin'];
+
+                    // Sau khi chắc chắn user tồn tại trong account, chèn vào user_tokens
+                    //$refresh_token = bin2hex(random_bytes(32));
+                    $insertResult = $this->modelSQL->Insert('user_tokens', [
+                        'google_id' => $google_id,
+                        'refresh_token' => $access_token,
+                        'expires_at' => $expires_at
+                    ]);
+                    error_log("Insert user_tokens result: " . ($insertResult ? 'Success' : 'Failed'));
+                    if (!$insertResult) {
+                        return ['error' => 'Lưu access token thất bại'];
+                    }
+
+                    $token = $this->authController->LoginWithGoogle($google_id);
+                    error_log("Token: " . ($token['token'] ?? 'Null'));
+                    if (isset($token['error'])) {
+                        return ['error' => $token['error']];
+                    }
+                    if (!$token['token']) {
+                        return ['error' => 'Tạo token thất bại'];
+                    }
+                    return [
+                        'status' => 'success',
+                        'token' => $token['token'],
+                        'message' => $user ? 'Người dùng đã tồn tại, đăng nhập thành công' : 'Thêm thành công'
+                    ];
+                }
+                return ['error' => 'Thiếu thông tin'];
             case 'get':
                 //$id = $params['id'] ?? null;
 
