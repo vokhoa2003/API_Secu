@@ -30,7 +30,7 @@ class AuthController{
         //print_r($user_id);
         //$jwtHanlder = new JwtHandler;
 
-        $token = $this->jwtHandler->createToken($user['GoogleID'], $user['role']);
+        $token = $this->jwtHandler->createToken($user['GoogleID'], $user['role'], $user['email'], $user['FullName']);
         error_log("Generated token: " . ($token ?? 'Null'));
         // json_encode(array("token" => $token));
         if(!isset($token) || empty($token)){

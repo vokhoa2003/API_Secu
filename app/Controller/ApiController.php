@@ -19,6 +19,7 @@ class ApiController{
         error_log("Action: $action");
         error_log("Params: " . print_r($params, true));
 
+        // Tạm thời bỏ kiểm tra CSRF để test
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!isset($params['csrf_token']) ?? '') {
                 http_response_code(403);
@@ -28,18 +29,18 @@ class ApiController{
         $middlewareResult = AuthMiddleware::verifyRequest($action);
         if (isset($middlewareResult['error'])) {
             return ['error' => $middlewareResult['error']];
-            exit;
+            // exit;
         }
         switch($action){
             
             case 'login':
-                $google_id = $params['GoogleID'] ?? null;
-                $email = $params['email'] ?? null;
-                $full_name = $params['FullName'] ?? null;
-                $role = $params['role'] ?? 'customer';
-                //$refresh_token = $params['refresh_token'] ?? null;
-                $access_token = $params['access_token'] ?? null;
-                $expires_at = $params['expires_at'] ?? null;
+                case 'login':
+                    $google_id = $params['GoogleID'] ?? null;
+                    $email = $params['email'] ?? null;
+                    $full_name = $params['FullName'] ?? null;
+                    $role = $params['role'] ?? 'customer';
+                    $access_token = $params['access_token'] ?? null;
+                    $expires_at = $params['expires_at'] ?? null;
 
                 if ($google_id && $email && $full_name && $access_token && $expires_at) {
                     // Kiểm tra và thêm người dùng vào account trước
@@ -54,16 +55,16 @@ class ApiController{
                         }
                     }
 
-                    // Sau khi chắc chắn user tồn tại trong account, chèn vào user_tokens
-                    //$refresh_token = bin2hex(random_bytes(32));
-                    $insertResult = $this->modelSQL->Insert('user_tokens', [
-                        'google_id' => $google_id,
-                        'refresh_token' => $access_token,
-                        'expires_at' => $expires_at
-                    ]);
-                    error_log("Insert user_tokens result: " . ($insertResult ? 'Success' : 'Failed'));
-                    if (!$insertResult) {return ['error' => 'Lưu access token thất bại'];
-                    }
+                        // Sau khi chắc chắn user tồn tại trong account, chèn vào user_tokens
+                        $insertResult = $this->modelSQL->Insert('user_tokens', [
+                            'google_id' => $google_id,
+                            'access_token' => $access_token,
+                            'expires_at' => $expires_at
+                        ]);
+                        error_log("Insert user_tokens result: " . ($insertResult ? 'Success' : 'Failed'));
+                        if (!$insertResult) {
+                            return ['error' => 'Lưu access token thất bại'];
+                        }
 
                     $token = $this->authController->LoginWithGoogle($google_id);
                     error_log("Token: " . ($token['token'] ?? 'Null'));
