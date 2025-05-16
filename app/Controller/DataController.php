@@ -11,7 +11,7 @@ class DataController {
     /**
      * Lấy dữ liệu từ bảng với điều kiện
      */
-    public function getData($table, $conditions = [], $columns = ['*'], $orderBy = '', $limit = '1') {
+    public function getData($table, $conditions = [], $columns = ['*'], $orderBy = '', $limit = '') {
         $result = $this->modelSQL->viewData($table, $conditions, $columns, $orderBy, $limit);
         $data = [];
         if ($result) {

@@ -31,7 +31,7 @@ class ApiController {
             return ['error' => $middlewareResult['error']];
         }
 
-        //$params = array_merge($params, $middlewareResult ?? []);
+        $params = array_merge($params, $middlewareResult ?? []);
 
         // Xử lý action
         switch ($action) {
@@ -81,6 +81,9 @@ class ApiController {
                 return ['error' => 'Thiếu thông tin'];
 
             case 'get':
+                if ($params['role'] === 'customer') {
+                    $params['limit'] = 1;
+                }
                 $table = $params['table'] ?? 'account';
                 $conditions = array_filter($params, fn($key) => !in_array($key, ['table', 'action', 'csrf_token']), ARRAY_FILTER_USE_KEY);
                 $columns = $params['columns'] ?? ['*'];
@@ -117,8 +120,11 @@ class ApiController {
                     ];
                 }
                 return ['message' => 'Thiếu thông tin'];
-
-            case 'update':
+            case 'AdminUpdate':
+                if($params['role'] !== 'admin'){
+                    http_response_code(403);
+                    return ['error' => 'Chỉ admin mới có quyền này'];
+                }
                 $table = $params['table'] ?? 'account';
                 $data = array_filter($params, fn($key) => !in_array($key, ['table', 'action', 'csrf_token', 'GoogleID']), ARRAY_FILTER_USE_KEY);
                 $conditions = ['GoogleID' => $params['GoogleID'] ?? null];
@@ -130,7 +136,23 @@ class ApiController {
                     return ['status' => 'error'];
                 }
                 return ['message' => 'Thiếu thông tin'];
+            case 'update':
+                if($params['role'] === 'customer' && $params['table'] === 'account'){
+                    $table = $params['table'] ?? 'account';
+                    $data = array_filter($params, fn($key) => !in_array($key, ['table', 'action', 'csrf_token', 'GoogleID']), ARRAY_FILTER_USE_KEY);
+                    $conditions = ['GoogleID' => $params['GoogleID'] ?? null];
 
+                    if ($conditions['GoogleID'] && !empty($data)) {
+                        if ($this->dataController->updateData($table, $data, $conditions)) {
+                            return ['status' => 'success'];
+                        }
+                        return ['status' => 'error'];
+                    }
+                    return ['message' => 'Thiếu thông tin'];
+                }else{
+                    http_response_code(403);
+                    return ['error' => 'Chỉ khách hàng mới có quyền này'];
+                }
             case 'delete':
                 $table = $params['table'] ?? 'account';
                 $conditions = array_filter($params, fn($key) => !in_array($key, ['table', 'action', 'csrf_token']), ARRAY_FILTER_USE_KEY);
