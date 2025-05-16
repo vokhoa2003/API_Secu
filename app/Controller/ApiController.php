@@ -81,14 +81,12 @@ class ApiController {
                 return ['error' => 'Thiếu thông tin'];
 
             case 'get':
-                if ($params['role'] === 'customer') {
-                    $params['limit'] = 1;
-                }
+                $limit = $params['limit'] ?? '';
                 $table = $params['table'] ?? 'account';
                 $conditions = array_filter($params, fn($key) => !in_array($key, ['table', 'action', 'csrf_token']), ARRAY_FILTER_USE_KEY);
                 $columns = $params['columns'] ?? ['*'];
                 $orderBy = $params['orderBy'] ?? '';
-                $limit = $params['limit'] ?? '';
+                
 
                 $data = $this->dataController->getData($table, $conditions, $columns, $orderBy, $limit);
                 return $data ?: ['message' => 'Không có dữ liệu'];
