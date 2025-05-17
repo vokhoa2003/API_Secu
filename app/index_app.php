@@ -35,24 +35,18 @@ if (empty($params)) {
 }
 
 if (strpos($requestUri, '/API_Secu') === 0) {
-    switch ($action) {
-        case 'login':
-        case 'get':
-        case 'add':
-        case 'update':
-        case 'delete':
-        case 'refresh_token':
-        case 'logout':
-            $result = $apiController->handleRequest($action, $params);
-            break;
-        default:
-            http_response_code(404);
-            $result = ['error' => 'Endpoint not found'];
+    if(!$action)
+    {
+        http_response_code(400);
+        $result = ['error' => 'Endpoint not found'];
+    }else{
+        $result= $apiController->handleRequest($action,$params);
     }
 } else {
     http_response_code(404);
     $result = ['error' => 'API endpoint must start with /API_Secu'];
 }
+
 
 // ✅ Chuẩn hóa kết quả thành List<Task> định dạng JSON
 if (!is_array($result)) {
@@ -65,15 +59,18 @@ foreach ($result as &$task) {
 
     // Chuyển thời gian sang định dạng ISO 8601
     if (isset($task['CreateDate'])) {
-        $task['createDate'] = date(DATE_ISO8601, strtotime($task['CreateDate']));
+        // $task['createDate'] = date(DATE_ISO8601, strtotime($task['CreateDate']));
+        $task['CreateDate'] = $task['CreateDate'];
         unset($task['CreateDate']);
     }
     if (isset($task['UpdateDate'])) {
-        $task['updateDate'] = date(DATE_ISO8601, strtotime($task['UpdateDate']));
+        //$task['updateDate'] = date(DATE_ISO8601, strtotime($task['UpdateDate']));
+        $task['updateDate'] = $task['UpdateDate'];
         unset($task['UpdateDate']);
     }
     if (isset($task['BirthDate']) && $task['BirthDate'] !== null) {
-        $task['birthDate'] = date(DATE_ISO8601, strtotime($task['BirthDate']));
+        //$task['birthDate'] = date(DATE_ISO8601, strtotime($task['BirthDate']));
+        $task['birthDate'] = $task['BirthDate'];
         unset($task['BirthDate']);
     } else {
         $task['birthDate'] = null;
@@ -92,6 +89,15 @@ foreach ($result as &$task) {
     if (isset($task['IdentityNumber'])) {
         $task['identityNumber'] = $task['IdentityNumber'];
         unset($task['IdentityNumber']);
+    }
+    
+    if (isset($task['Phone'])) {
+        $task['phone'] = $task['Phone'];
+        unset($task['Phone']);
+    }
+    if (isset($task['Address'])) {
+        $task['address'] = $task['Address'];
+        unset($task['Address']);
     }
     if (isset($task['Status'])) {
         $task['status'] = $task['Status'];

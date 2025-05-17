@@ -35,15 +35,35 @@ class DataController {
      * Cập nhật dữ liệu
      */
     public function updateData($table, $data, $conditions) {
-        $data['UpdateDate'] = date('Y-m-d H:i:s');
-        return $this->modelSQL->update($table, $data, $conditions);
-    }
+        $oldDataResult = $this->modelSQL->viewData($table, $conditions);
+        if (!$oldDataResult || $oldDataResult->num_rows === 0) {
+            return false; // Không tìm thấy dữ liệu để cập nhật
+        }
+        $oldData = $oldDataResult->fetch_assoc();
 
-    /**
-     * Xóa dữ liệu
-     */
-    public function deleteData($table, $conditions) {
-        return $this->modelSQL->delete($table, $conditions);
+        // Duyệt qua các field cần cập nhật
+        foreach ($data as $key => $value) {
+            // Nếu giá trị mới null hoặc chuỗi rỗng, giữ lại giá trị cũ
+            if ($value === null || $value === '') {
+                if (array_key_exists($key, $oldData)) {
+                    $data[$key] = $oldData[$key];
+                } else {
+                    unset($data[$key]); // Không tồn tại trong DB, bỏ qua
+                }
+            }
+        }
+
+        // Cập nhật thời gian
+        $data['UpdateDate'] = date('Y-m-d H:i:s');
+
+        return $this->modelSQL->update($table, $data, $conditions);
+        }
+
+        /**
+         * Xóa dữ liệu
+         */
+        public function deleteData($table, $conditions) {
+            return $this->modelSQL->delete($table, $conditions);
     }
 }
 // require_once __DIR__ . '/../Model/mSQL.php';

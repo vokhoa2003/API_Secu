@@ -31,7 +31,7 @@ class ApiController {
             return ['error' => $middlewareResult['error']];
         }
 
-        $params = array_merge($params, $middlewareResult ?? []);
+        //$params = array_merge($params, $middlewareResult ?? []);
 
         // Xử lý action
         switch ($action) {
@@ -41,6 +41,7 @@ class ApiController {
                 $email = $params['email'] ?? null;
                 $full_name = $params['FullName'] ?? null;
                 $role = $params['role'] ?? 'customer';
+                $status = $params['status'] ?? null;
                 $access_token = $params['access_token'] ?? null;
                 $expires_at = $params['expires_at'] ?? null;
 
@@ -51,7 +52,8 @@ class ApiController {
                             'GoogleID' => $google_id,
                             'email' => $email,
                             'FullName' => $full_name,
-                            'role' => $role
+                            'role' => $role,
+                            'status' => $status
                         ];
                         $addUserResult = $this->dataController->addData($table, $data);
                         if (!$addUserResult) {
@@ -119,15 +121,15 @@ class ApiController {
                 }
                 return ['message' => 'Thiếu thông tin'];
             case 'AdminUpdate':
-                if($params['role'] !== 'admin'){
-                    http_response_code(403);
-                    return ['error' => 'Chỉ admin mới có quyền này'];
-                }
+                // if($params['role'] !== 'admin'){
+                //     http_response_code(403);
+                //     return ['error' => 'Chỉ admin mới có quyền này'];
+                // }
                 $table = $params['table'] ?? 'account';
                 $data = array_filter($params, fn($key) => !in_array($key, ['table', 'action', 'csrf_token', 'GoogleID']), ARRAY_FILTER_USE_KEY);
-                $conditions = ['GoogleID' => $params['GoogleID'] ?? null];
+                $conditions = ['email' => $params['email'] ?? null];
 
-                if ($conditions['GoogleID'] && !empty($data)) {
+                if ($conditions['email'] && !empty($data)) {
                     if ($this->dataController->updateData($table, $data, $conditions)) {
                         return ['status' => 'success'];
                     }
