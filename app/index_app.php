@@ -60,7 +60,7 @@ foreach ($result as &$task) {
     // Chuyển thời gian sang định dạng ISO 8601
     if (isset($task['CreateDate'])) {
         // $task['createDate'] = date(DATE_ISO8601, strtotime($task['CreateDate']));
-        $task['CreateDate'] = $task['CreateDate'];
+        $task['createDate'] = $task['CreateDate'];
         unset($task['CreateDate']);
     }
     if (isset($task['UpdateDate'])) {

@@ -47,10 +47,39 @@ class ModelSQL extends Connect {
     /**
      * Thêm hoặc cập nhật dữ liệu
      */
+    // public function insert($table, $data, $onDuplicateKeyUpdate = true) {
+    //     $con = $this->openDB();
+    //     $columns = array_keys($data);
+    //     $placeholders = array_fill(0, count($data), "?");
+    //     $sql = "INSERT INTO $table (" . implode(",", $columns) . ") VALUES (" . implode(",", $placeholders) . ")";
+        
+    //     if ($onDuplicateKeyUpdate) {
+    //         $updates = array_map(fn($key) => "$key=VALUES($key)", $columns);
+    //         $sql .= " ON DUPLICATE KEY UPDATE " . implode(", ", $updates);
+    //     }
+        
+    //     $types = str_repeat("s", count($data)); // Có thể cải tiến để hỗ trợ kiểu dữ liệu khác
+    //     return $this->executeQuery($sql, array_values($data), $types) !== false;
+    // }
     public function insert($table, $data, $onDuplicateKeyUpdate = true) {
         $con = $this->openDB();
-        $columns = array_keys($data);
-        $placeholders = array_fill(0, count($data), "?");
+        
+        // Loại bỏ key trùng lặp, giữ giá trị cuối cùng
+        $filteredData = array_combine(
+            array_map('strtolower', array_keys($data)),
+            array_values($data)
+        );
+        $filteredData = array_combine(
+            array_map('ucfirst', array_keys($filteredData)),
+            array_values($filteredData)
+        );
+        
+        if (empty($filteredData)) {
+            return false;
+        }
+
+        $columns = array_keys($filteredData);
+        $placeholders = array_fill(0, count($filteredData), "?");
         $sql = "INSERT INTO $table (" . implode(",", $columns) . ") VALUES (" . implode(",", $placeholders) . ")";
         
         if ($onDuplicateKeyUpdate) {
@@ -58,10 +87,9 @@ class ModelSQL extends Connect {
             $sql .= " ON DUPLICATE KEY UPDATE " . implode(", ", $updates);
         }
         
-        $types = str_repeat("s", count($data)); // Có thể cải tiến để hỗ trợ kiểu dữ liệu khác
-        return $this->executeQuery($sql, array_values($data), $types) !== false;
+        $types = str_repeat("s", count($filteredData));
+        return $this->executeQuery($sql, array_values($filteredData), $types) !== false;
     }
-
     /**
      * Cập nhật dữ liệu
      */
