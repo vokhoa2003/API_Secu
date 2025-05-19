@@ -119,6 +119,7 @@ class ApiController {
                 }
                 return ['message' => 'Thiếu thông tin'];
             case 'AdminUpdate':
+
                 if($params['role'] !== 'admin'){
                     http_response_code(403);
                     return ['error' => 'Chỉ admin mới có quyền này'];

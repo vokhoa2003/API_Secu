@@ -55,6 +55,7 @@ class DataController {
 
         // Cập nhật thời gian
         $data['UpdateDate'] = date('Y-m-d H:i:s');
+
         return $this->modelSQL->update($table, $data, $conditions);
     }
 
