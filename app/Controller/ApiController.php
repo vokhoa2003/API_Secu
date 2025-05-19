@@ -41,6 +41,7 @@ class ApiController {
                 $email = $params['email'] ?? null;
                 $full_name = $params['FullName'] ?? null;
                 $role = $params['role'] ?? 'customer';
+                $status = $params['status'] ?? 'Active';
                 $access_token = $params['access_token'] ?? null;
                 $expires_at = $params['expires_at'] ?? null;
 
@@ -51,7 +52,8 @@ class ApiController {
                             'GoogleID' => $google_id,
                             'email' => $email,
                             'FullName' => $full_name,
-                            'role' => $role
+                            'role' => $role,
+                            'status' => $status
                         ];
                         $addUserResult = $this->dataController->addData($table, $data);
                         if (!$addUserResult) {
@@ -77,6 +79,57 @@ class ApiController {
                         'token' => $token['token'],
                         'message' => $user ? 'Đăng nhập thành công' : 'Thêm và đăng nhập thành công'
                     ];
+                }
+                return ['error' => 'Thiếu thông tin'];
+            case 'app_login':
+                $table = $params['table'] ?? 'account';
+                $google_id = $params['GoogleID'] ?? null;
+                $email = $params['email'] ?? null;
+                $full_name = $params['FullName'] ?? null;
+                $access_token = $params['access_token'] ?? null;
+                $expires_at = $params['expires_at'] ?? null;
+
+                if ($google_id && $email && $full_name && $access_token && $expires_at) {
+                    // Tìm user dựa trên email trước
+                    $existingUser = $this->dataController->getData($table, ['email' => $email], ['GoogleID', 'role', 'status']);
+                    
+                    if ($existingUser) {
+                        $dbGoogleId = $existingUser[0]['GoogleID'] ?? null;
+                        
+                        if ($dbGoogleId === null || $dbGoogleId !== $google_id) {
+                            // Cập nhật GoogleID trong database nếu nó trống hoặc không khớp
+                            $updateResult = $this->dataController->updateData($table, ['GoogleID' => $google_id], ['email' => $email]);
+                            if (!$updateResult) {
+                                return ['error' => 'Cập nhật GoogleID thất bại'];
+                            }
+                        }
+
+                        // Tiếp tục đăng nhập
+                        $insertResult = $this->modelSQL->insert('user_tokens', [
+                            'google_id' => $google_id,
+                            'refresh_token' => $access_token,
+                            'expires_at' => $expires_at
+                        ]);
+                        if (!$insertResult) {
+                            return ['error' => 'Lưu access token thất bại'];
+                        }
+                        
+                        $token = $this->authController->LoginWithGoogle($google_id);
+                        if (isset($token['error']) || !$token['token']) {
+                            return ['error' => $token['error'] ?? 'Tạo token thất bại'];
+                        }
+                        
+                        return [
+                            'status' => 'success',
+                            'token' => $token['token'],
+                            'message' => 'Đăng nhập thành công',
+                            'role' => $existingUser[0]['role'],
+                            'status' => $existingUser[0]['status']
+                        ];
+                    } else {
+                        // User không tồn tại, từ chối tạo mới
+                        return ['error' => 'Tài khoản không tồn tại hoặc chưa được admin tạo'];
+                    }
                 }
                 return ['error' => 'Thiếu thông tin'];
 
@@ -126,9 +179,9 @@ class ApiController {
                 }
                 $table = $params['table'] ?? 'account';
                 $data = array_filter($params, fn($key) => !in_array($key, ['table', 'action', 'csrf_token', 'GoogleID']), ARRAY_FILTER_USE_KEY);
-                $conditions = ['GoogleID' => $params['GoogleID'] ?? null];
+                $conditions = ['email' => $params['email'] ?? null];
 
-                if ($conditions['GoogleID'] && !empty($data)) {
+                if ($conditions['email'] && !empty($data)) {
                     if ($this->dataController->updateData($table, $data, $conditions)) {
                         return ['status' => 'success'];
                     }

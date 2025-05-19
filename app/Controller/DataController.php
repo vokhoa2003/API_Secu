@@ -57,13 +57,13 @@ class DataController {
         $data['UpdateDate'] = date('Y-m-d H:i:s');
 
         return $this->modelSQL->update($table, $data, $conditions);
-    }
+        }
 
-    /**
-     * Xóa dữ liệu
-     */
-    public function deleteData($table, $conditions) {
-        return $this->modelSQL->delete($table, $conditions);
+        /**
+         * Xóa dữ liệu
+         */
+        public function deleteData($table, $conditions) {
+            return $this->modelSQL->delete($table, $conditions);
     }
 }
 // require_once __DIR__ . '/../Model/mSQL.php';
