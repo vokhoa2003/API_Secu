@@ -30,9 +30,9 @@ class ApiController {
         if (isset($middlewareResult['error'])) {
             return ['error' => $middlewareResult['error']];
         }
-
-        $params = array_merge($params, $middlewareResult ?? []);
-
+        if (isset($middlewareResult['role']) && $middlewareResult['role'] === 'customer') {
+            $params['GoogleID'] = $middlewareResult['GoogleID']; // hạn chế chỉ truy xuất của chính họ
+        }      
         // Xử lý action
         switch ($action) {
             case 'login':

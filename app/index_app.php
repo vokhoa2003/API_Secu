@@ -35,19 +35,11 @@ if (empty($params)) {
 }
 
 if (strpos($requestUri, '/API_Secu') === 0) {
-    switch ($action) {
-        case 'login':
-        case 'get':
-        case 'add':
-        case 'update':
-        case 'delete':
-        case 'refresh_token':
-        case 'logout':
-            $result = $apiController->handleRequest($action, $params);
-            break;
-        default:
-            http_response_code(404);
-            $result = ['error' => 'Endpoint not found'];
+    if(!$action) {
+        http_response_code(400);
+        $result = ['error' => 'Endpoint not found'];
+    } else {
+        $result = $apiController->handleRequest($action, $params);
     }
 } else {
     http_response_code(404);
