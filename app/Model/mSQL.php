@@ -5,17 +5,42 @@ class ModelSQL extends Connect {
     /**
      * Thực thi truy vấn SQL tùy chỉnh
      */
+    // public function executeQuery($sql, $params = [], $types = "") {
+    //     $con = $this->openDB();
+    //     $stmt = $con->prepare($sql);
+    //     if (!empty($params)) {
+    //         $stmt->bind_param($types ?: str_repeat("s", count($params)), ...$params);
+    //     }
+    //     $stmt->execute();
+    //     $result = $stmt->get_result() ?: $stmt->affected_rows;
+    //     $stmt->close();
+    //     return $result;
+    // }
     public function executeQuery($sql, $params = [], $types = "") {
         $con = $this->openDB();
         $stmt = $con->prepare($sql);
         if (!empty($params)) {
-            $stmt->bind_param($types ?: str_repeat("s", count($params)), ...$params);
+            if (empty($types)) {
+                $types = str_repeat("s", count($params));
+            }
+
+            // Tạo mảng tham chiếu
+            $bindParams = [];
+            $bindParams[] = &$types;
+            foreach ($params as $key => $value) {
+                $bindParams[] = &$params[$key]; // tham chiếu
+            }
+
+            // Gọi bind_param bằng call_user_func_array
+            call_user_func_array([$stmt, 'bind_param'], $bindParams);
         }
+
         $stmt->execute();
         $result = $stmt->get_result() ?: $stmt->affected_rows;
         $stmt->close();
         return $result;
     }
+
 
     /**
      * Lấy dữ liệu từ bảng với điều kiện linh hoạt

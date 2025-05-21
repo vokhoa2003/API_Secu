@@ -53,10 +53,15 @@ if (!is_array($result)) {
     $result = [$result];
 }
 
+
 // Đảm bảo mỗi phần tử là task, xử lý key và format datetime
 foreach ($result as &$task) {
     if (!is_array($task)) continue;
 
+    // if (isset($task['status'])&&$task['status'] === 'success') {
+    //     $task['StatusAPI'] = $task['status'];
+    //     unset($task['status']);
+    // }
     // Chuyển thời gian sang định dạng ISO 8601
     if (isset($task['CreateDate'])) {
         // $task['createDate'] = date(DATE_ISO8601, strtotime($task['CreateDate']));
@@ -68,12 +73,9 @@ foreach ($result as &$task) {
         $task['updateDate'] = $task['UpdateDate'];
         unset($task['UpdateDate']);
     }
-    if (isset($task['BirthDate']) && $task['BirthDate'] !== null) {
+    if (isset($task['BirthDate'])) {
         //$task['birthDate'] = date(DATE_ISO8601, strtotime($task['BirthDate']));
         $task['birthDate'] = $task['BirthDate'];
-        unset($task['BirthDate']);
-    } else {
-        $task['birthDate'] = null;
         unset($task['BirthDate']);
     }
 

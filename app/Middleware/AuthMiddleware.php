@@ -3,7 +3,7 @@
 require __DIR__ . "/../../JwtHandler.php";
 class AuthMiddleware{
     public static function verifyRequest($action){
-        $protectedAction = ['get', 'update', 'delete', 'logout', 'add', 'AdminUpdate'];
+        $protectedAction = [ 'update', 'delete', 'logout', 'add', 'AdminUpdate'];
         if(in_array($action, $protectedAction)){
             $headers = getallheaders();
             if(!isset($headers["Authorization"])){
@@ -36,11 +36,11 @@ class AuthMiddleware{
                 exit;
             }
 
-            if (($action === 'delete' || $action === 'AdminUpdate' || $action === 'add') && $result['data']['role'] !== 'admin') {
-                http_response_code(403);
-                echo json_encode(['error' => 'Only admins can delete users'], JSON_PRETTY_PRINT);
-                exit;
-            }
+            // if (($action === 'delete' || $action === 'AdminUpdate' || $action === 'add') && $result['data']['role'] !== 'admin') {
+            //     http_response_code(403);
+            //     echo json_encode(['error' => 'Only admins can do this action'], JSON_PRETTY_PRINT);
+            //     exit;
+            // }
             return $result['data'];
         }
         return null;

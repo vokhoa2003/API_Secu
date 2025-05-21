@@ -29,7 +29,11 @@ class AuthController{
         }
         //print_r($user_id);
         //$jwtHanlder = new JwtHandler;
-
+        if(isset($user['Status']) && $user['Status'] == 'Blocked'){
+            http_response_code(401);
+            // echo json_encode(array("error" => "User is inactive"));
+            return ["error" => "User is inactive"];
+        }
         $token = $this->jwtHandler->createToken($user['GoogleID'], $user['role']);
         error_log("Generated token: " . ($token ?? 'Null'));
         // json_encode(array("token" => $token));

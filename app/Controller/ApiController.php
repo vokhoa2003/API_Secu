@@ -1,4 +1,8 @@
 <?php
+// Disable error reporting for this file
+// error_reporting(0);
+// ini_set('display_errors', 0);
+
 require_once __DIR__ . '/../Model/mSQL.php';
 require_once __DIR__ . '/DataController.php';
 require_once __DIR__ . '/AuthController.php';
@@ -142,52 +146,77 @@ class ApiController {
                 
 
                 $data = $this->dataController->getData($table, $conditions, $columns, $orderBy, $limit);
-                return $data ?: ['message' => 'Không có dữ liệu'];
+                return $data ?: [
+                    'status' => 'error',
+                    'message' => 'Không có dữ liệu'
+                ];
 
             case 'add':
                 $table = $params['table'] ?? 'account';
                 $data = array_filter($params, fn($key) => !in_array($key, ['table', 'action', 'csrf_token']), ARRAY_FILTER_USE_KEY);
                 $data['role'] = $data['role'] ?? 'customer';
-
                 if (!empty($data)) {
+                    if(isset($data['email'])){
+                        if($this->dataController->getData($table, ['email' => $data['email']])){
+                            return [
+                                'status' => 'error',
+                                'message' => 'Người dùng đã tồn tại'
+                            ];
+                        }
+                    }
                     $google_id = $data['GoogleID'] ?? null;
                     $user = $google_id ? $this->authController->GetUserIdByGoogleId($google_id) : null;
                     if (!$user) {
                         if ($this->dataController->addData($table, $data)) {
-                            $token = $google_id ? $this->authController->LoginWithGoogle($google_id) : null;
+                            //$token = $google_id ? $this->authController->LoginWithGoogle($google_id) : null;
                             return [
                                 'status' => 'success',
-                                'token' => $token['token'] ?? null,
+                                //'token' => $token['token'] ?? null,
                                 'message' => 'Thêm thành công'
                             ];
                         }
-                        return ['message' => 'Thêm thất bại'];
+                        return [
+                            'status' => 'error',
+                            'message' => 'Thêm thất bại'
+                        ];
                     }
-                    $token = $google_id ? $this->authController->LoginWithGoogle($google_id) : null;
+                    //$token = $google_id ? $this->authController->LoginWithGoogle($google_id) : null;
                     return [
-                        'status' => 'success',
-                        'token' => $token['token'] ?? null,
+                        'status' => 'error',
+                        //'token' => $token['token'] ?? null,
                         'message' => 'Người dùng đã tồn tại'
                     ];
                 }
                 return ['message' => 'Thiếu thông tin'];
             case 'AdminUpdate':
 
-                if($params['role'] !== 'admin'){
-                    http_response_code(403);
-                    return ['error' => 'Chỉ admin mới có quyền này'];
-                }
+                // if($params['role'] !== 'admin'){
+                //     http_response_code(403);
+                //     return [
+                //         'message' => 'Chỉ admin mới có quyền này',
+                //         'status' => 'error'
+                //     ];
+                // }
                 $table = $params['table'] ?? 'account';
                 $data = array_filter($params, fn($key) => !in_array($key, ['table', 'action', 'csrf_token', 'GoogleID']), ARRAY_FILTER_USE_KEY);
                 $conditions = ['email' => $params['email'] ?? null];
 
                 if ($conditions['email'] && !empty($data)) {
                     if ($this->dataController->updateData($table, $data, $conditions)) {
-                        return ['status' => 'success'];
+                        return [
+                            'status' => 'success',
+                            'message' => 'Cập nhật thành công'
+                        ];
                     }
-                    return ['status' => 'error'];
+                    return [
+                        'status' => 'error',
+                        'message' => 'Cập nhật thất bại'
+                    ];
                 }
-                return ['message' => 'Thiếu thông tin'];
+                return [
+                    'message' => 'Thiếu thông tin',
+                    'status' => 'error'
+                ];
             case 'update':
                 if($params['role'] === 'customer' && $params['table'] === 'account'){
                     $table = $params['table'] ?? 'account';
