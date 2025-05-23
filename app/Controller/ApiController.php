@@ -24,18 +24,20 @@ class ApiController {
         error_log("Params: " . print_r($params, true));
 
         // Kiểm tra CSRF token cho POST
-        if ($_SERVER['REQUEST_METHOD'] === 'POST' && empty($params['csrf_token'])) {
-            http_response_code(403);
-            return ['error' => 'Invalid CSRF token'];
+        if (($_SERVER['REQUEST_METHOD'] === 'POST' || $_SERVER['REQUEST_METHOD'] === 'GET' ) && empty($params['csrf_token'])) {
+        http_response_code(403);
+        return ['error' => 'Invalid CSRF token'];
+        exit;
         }
-
         // Xác thực qua middleware
         $middlewareResult = AuthMiddleware::verifyRequest($action);
         if (isset($middlewareResult['error'])) {
             return ['error' => $middlewareResult['error']];
+            exit;
         }
         if (isset($middlewareResult['role']) && $middlewareResult['role'] === 'customer') {
             $params['GoogleID'] = $middlewareResult['GoogleID']; // hạn chế chỉ truy xuất của chính họ
+
         }      
         // Xử lý action
         switch ($action) {
@@ -146,6 +148,18 @@ class ApiController {
                 
 
                 $data = $this->dataController->getData($table, $conditions, $columns, $orderBy, $limit);
+                if(isset($data[0]['GoogleID'])){
+                    foreach ($data as &$row) {
+                        if (isset($row['GoogleID'])) {
+                            unset($row['GoogleID']);
+                            if (isset($row['IdentityNumber'])) {
+                                $row['IdentityNumber'] = hash('sha256', $row['IdentityNumber']);
+                            } else {
+                                $row['IdentityNumber'] = null;
+                            }
+                        }
+                    }
+                }
                 return $data ?: [
                     'status' => 'error',
                     'message' => 'Không có dữ liệu'

@@ -17,6 +17,7 @@ class AuthController{
             // echo json_encode(array("error" => "Missing google_id"));
             // exit;
             return ["error" => "Missing google_id"];
+            exit;
         }
         // $googleId = $_POST["google_id"];
         $user = $this->GetUserIdByGoogleId($googleId);
@@ -25,7 +26,7 @@ class AuthController{
             http_response_code(401);
             // echo json_encode(array("error" => "User not found"));
             return ["error" => "User not found"];
-            //exit;
+            exit;
         }
         //print_r($user_id);
         //$jwtHanlder = new JwtHandler;
@@ -33,6 +34,7 @@ class AuthController{
             http_response_code(401);
             // echo json_encode(array("error" => "User is inactive"));
             return ["error" => "User is inactive"];
+            exit;
         }
         $token = $this->jwtHandler->createToken($user['GoogleID'], $user['role']);
         error_log("Generated token: " . ($token ?? 'Null'));
@@ -40,6 +42,7 @@ class AuthController{
         if(!isset($token) || empty($token)){
             http_response_code(500);
             return ["error" => "Token generation failed"];
+            exit;
         }
         return ["status" => "success", "token" => $token];
         

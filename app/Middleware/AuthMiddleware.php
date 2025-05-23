@@ -3,7 +3,7 @@
 require __DIR__ . "/../../JwtHandler.php";
 class AuthMiddleware{
     public static function verifyRequest($action){
-        $protectedAction = [ 'update', 'delete', 'logout', 'add', 'AdminUpdate'];
+        $protectedAction = ['get', 'update', 'delete', 'logout', 'add', 'AdminUpdate'];
         if(in_array($action, $protectedAction)){
             $headers = getallheaders();
             if(!isset($headers["Authorization"])){

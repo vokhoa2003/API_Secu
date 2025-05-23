@@ -11,7 +11,7 @@ $encryption = new Encryption($_ENV['ENCRYPTION_KEY']);
 $apiController = new ApiController();
 
 $requestUri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
-$action = $_GET['action'] ?? trim(str_replace('/API_Secu', '', $requestUri), '/');
+$action = $_POST['action'] ?? trim(str_replace('/API_Secu', '', $requestUri), '/');
 
 $input = file_get_contents('php://input');
 error_log("Raw input from php://input: " . $input);
@@ -27,7 +27,6 @@ if (!empty($input) && isset($_SERVER['CONTENT_TYPE']) && $_SERVER['CONTENT_TYPE'
         error_log("Received POST params: " . print_r($_POST, true));
     }
 }
-
 if (empty($params)) {
     error_log("No params received, checking GET params");
     $params = array_merge($params, $_GET);
