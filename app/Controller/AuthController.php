@@ -48,18 +48,6 @@ class AuthController{
         
     }
     public function GetUserIdByGoogleId($googleId){
-        // $con = $this->OpenDB();
-        // $stmt =$con->prepare("SELECT * FROM account WHERE GoogleID = ? limit 1");
-        // $stmt->bind_param("s", $googleId);
-        // $stmt->execute();
-        // $result = $stmt->get_result();
-        // if($result && $result->num_rows > 0 ){
-        //     $user = $result->fetch_assoc();
-        //     $this->closeDB();
-        //     return $user;
-        // }
-        // $this->closeDB();
-        // return null;
         $result = $this->modelSQL->ViewData('account', ['GoogleID' => $googleId]);
         if ($result && $row = $result->fetch_assoc()) {
             error_log("GetUserIdByGoogleId found: " . print_r($row, true));
