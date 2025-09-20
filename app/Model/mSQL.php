@@ -159,6 +159,37 @@ class ModelSQL extends Connect {
         $sql = "DELETE FROM $table WHERE " . implode(" AND ", $where);
         return $this->executeQuery($sql, $params, $types) !== false;
     }
+
+    /**
+     * Tự động tạo truy vấn SELECT với JOIN và điều kiện
+     */
+    public function autoQuery($tables, $columns = ['*'], $join = [], $conditions = []) {
+        $sql = "SELECT " . implode(", ", $columns) . " FROM ";
+        $params = [];
+        $types = '';
+
+        if (is_array($tables)) {
+            $sql .= $tables[0];
+            if (!empty($join) && isset($join['type'], $join['on'], $tables[1])) {
+                $sql .= " {$join['type']} JOIN {$tables[1]} ON " . implode(" AND ", $join['on']);
+            }
+        } else {
+            $sql .= $tables;
+        }
+
+        if (!empty($conditions)) {
+            $sql .= " WHERE ";
+            $conds = [];
+            foreach ($conditions as $field => $value) {
+                $conds[] = "$field = ?";
+                $params[] = $value;
+                $types .= is_int($value) ? 'i' : 's';
+            }
+            $sql .= implode(" AND ", $conds);
+        }
+
+        return $this->executeQuery($sql, $params, $types);
+    }
 }
 
 // require_once __DIR__ .'/mConnect.php';

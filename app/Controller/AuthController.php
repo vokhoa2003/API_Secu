@@ -47,13 +47,14 @@ class AuthController{
         return ["status" => "success", "token" => $token];
         
     }
-    public function GetUserIdByGoogleId($googleId){
-        $result = $this->modelSQL->ViewData('account', ['GoogleID' => $googleId]);
+    public function GetUserIdByGoogleId($google_id, $table = 'account') {
+        // Có thể truyền bảng từ ApiController
+        $result = $this->modelSQL->ViewData($table, ['GoogleID' => $google_id]);
         if ($result && $row = $result->fetch_assoc()) {
             error_log("GetUserIdByGoogleId found: " . print_r($row, true));
             return $row;
         }
-        error_log("GetUserIdByGoogleId: No user found for GoogleID $googleId");
+        error_log("GetUserIdByGoogleId: No user found for GoogleID $google_id");
         return null;
     }
     public function getBearerToken(){
@@ -83,4 +84,4 @@ class AuthController{
         return $userData['data'];
     }
 }
-?>  
+?>

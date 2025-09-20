@@ -9,13 +9,6 @@ $encryption = new Encryption($_ENV['ENCRYPTION_KEY']);
 $apiController = new ApiController;
 $action = isset($_GET['action']) ? $_GET['action'] : (isset($_POST['action']) ? $_POST['action'] : '');
 $inputData = json_decode(mb_convert_encoding(file_get_contents("php://input"), 'UTF-8', 'auto'), true) ?? [];
-// $csrfCookie = $_COOKIE['csrf_token'] ?? '';
-// $csrfHeader = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
-// if ($csrfCookie === '' || $csrfHeader === '' || $csrfCookie !== $csrfHeader) {
-//     http_response_code(403);
-//     echo json_encode(['error' => 'Invalid CSRF token'], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
-//     exit;
-// }
 if (isset($inputData['encrypted'])) {
     // Giải mã dữ liệu đầu vào
     $params = $encryption->decrypt($inputData['encrypted']);
@@ -30,6 +23,6 @@ if (isset($inputData['encrypted'])) {
 // exit;
 $result = $apiController->handleRequest($action, $params);
 $encryptedResult = $encryption->encrypt($result);
-//echo json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
-echo json_encode(['encrypted' => $encryptedResult], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+echo json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+//echo json_encode(['encrypted' => $encryptedResult], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
 ?>

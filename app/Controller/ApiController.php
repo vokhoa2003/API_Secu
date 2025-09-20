@@ -16,34 +16,51 @@ class ApiController {
         $this->modelSQL = new ModelSQL();
     }
 
+    private function checkCsrf($params) {
+        $method = $_SERVER['REQUEST_METHOD'];
+        if (in_array($method, ['POST', 'PUT', 'DELETE'])) {
+            if (empty($params['csrf_token']) || !isset($_COOKIE['csrf_token']) || $_COOKIE['csrf_token'] !== $params['csrf_token']) {
+                http_response_code(403);
+                return false;
+            }
+        }
+        return true;
+    }
+
     public function handleRequest($action, $params) {
-        error_log("Action: $action");
-        error_log("Params: " . print_r($params, true));
+        // error_log("Action: $action");
+        // error_log("Params: " . print_r($params, true));
 
-        //Kiểm tra CSRF token cho POST
-        if (($_SERVER['REQUEST_METHOD'] === 'POST' || $_SERVER['REQUEST_METHOD'] === 'GET' ) && empty($params['csrf_token']) ) {
-        http_response_code(403);
-        return ['error' => 'Invalid CSRF token'];
-        exit;
-        }
-        // Xác thực qua middleware
-        $middlewareResult = AuthMiddleware::verifyRequest($action);
-        if (isset($middlewareResult['error'])) {
-            return ['error' => $middlewareResult['error']];
-            exit;
-        }
-        if (isset($middlewareResult['role']) && $middlewareResult['role'] === 'customer') {
-            $params['GoogleID'] = $middlewareResult['GoogleID']; // hạn chế chỉ truy xuất của chính họ
+        // // Kiểm tra CSRF token cho các phương thức thay đổi dữ liệu
+        // if (!$this->checkCsrf($params)) {
+        //     return [
+        //         'status' => 'error',
+        //         'message' => 'Invalid CSRF token'
+        //     ];
+        // }
 
-        }      
-        // Xử lý action
+        // //Chỉ xác thực token với các action cần bảo vệ
+        // $actionsRequireAuth = ['get', 'update', 'delete', 'logout', 'refresh_token'];
+        // if (in_array($action, $actionsRequireAuth)) {
+        //     $middlewareResult = AuthMiddleware::verifyRequest($action);
+        //     if (isset($middlewareResult['error'])) {
+        //         http_response_code(401);
+        //         return [
+        //             'status' => 'error',
+        //             'message' => $middlewareResult['error']
+        //         ];
+        //     }
+        //     // Luôn lấy GoogleID và role từ token đã xác thực
+        //     $params['GoogleID'] = $middlewareResult['GoogleID'];
+        //     $params['role'] = $middlewareResult['role'];
+        // }
         switch ($action) {
             case 'login':
                 $table = $params['table'] ?? 'account';
                 $google_id = $params['GoogleID'] ?? null;
                 $email = $params['email'] ?? null;
                 $full_name = $params['FullName'] ?? null;
-                $role = $params['role'] ?? 'customer';
+                $role = $params['role'] ?? 'student';
                 $status = $params['status'] ?? 'Active';
                 $access_token = $params['access_token'] ?? null;
                 $expires_at = $params['expires_at'] ?? null;
@@ -60,7 +77,10 @@ class ApiController {
                         ];
                         $addUserResult = $this->dataController->addData($table, $data);
                         if (!$addUserResult) {
-                            return ['error' => 'Thêm người dùng thất bại'];
+                            return [
+                                'status' => 'error',
+                                'message' => 'Thêm người dùng thất bại'
+                            ];
                         }
                     }
 
@@ -70,12 +90,18 @@ class ApiController {
                         'expires_at' => $expires_at
                     ]);
                     if (!$insertResult) {
-                        return ['error' => 'Lưu access token thất bại'];
+                        return [
+                            'status' => 'error',
+                            'message' => 'Lưu access token thất bại'
+                        ];
                     }
 
                     $token = $this->authController->LoginWithGoogle($google_id);
                     if (isset($token['error']) || !$token['token']) {
-                        return ['error' => $token['error'] ?? 'Tạo token thất bại'];
+                        return [
+                            'status' => 'error',
+                            'message' => $token['error'] ?? 'Tạo token thất bại'
+                        ];
                     }
                     return [
                         'status' => 'success',
@@ -83,72 +109,140 @@ class ApiController {
                         'message' => $user ? 'Đăng nhập thành công' : 'Thêm và đăng nhập thành công'
                     ];
                 }
-                return ['error' => 'Thiếu thông tin'];
+                return [
+                    'status' => 'error',
+                    'message' => 'Thiếu thông tin'
+                ];
+
             case 'app_login':
                 $table = $params['table'] ?? 'account';
                 $google_id = $params['GoogleID'] ?? null;
                 $email = $params['email'] ?? null;
                 $full_name = $params['FullName'] ?? null;
+                $role = $params['role'] ?? 'student';
                 $access_token = $params['access_token'] ?? null;
                 $expires_at = $params['expires_at'] ?? null;
 
                 if ($google_id && $email && $full_name && $access_token && $expires_at) {
-                    // Tìm user dựa trên email trước
-                    $existingUser = $this->dataController->getData($table, ['email' => $email], ['GoogleID', 'role', 'status']);
-                    
+                    //$existingUser = $this->dataController->getData($table, ['email' => $email], ['GoogleID', 'role', 'status']);
+                    $existingUser = $this->authController->GetUserIdByGoogleId($google_id);
                     if ($existingUser) {
-                        $dbGoogleId = $existingUser[0]['GoogleID'] ?? null;
-                        
+                        $dbGoogleId = $existingUser['GoogleID'] ?? null;
                         if ($dbGoogleId === null || $dbGoogleId !== $google_id) {
-                            // Cập nhật GoogleID trong database nếu nó trống hoặc không khớp
                             $updateResult = $this->dataController->updateData($table, ['GoogleID' => $google_id], ['email' => $email]);
                             if (!$updateResult) {
-                                return ['error' => 'Cập nhật GoogleID thất bại'];
+                                return [
+                                    'status' => 'error',
+                                    'message' => 'Cập nhật GoogleID thất bại'
+                                ];
                             }
                         }
-
-                        // Tiếp tục đăng nhập
                         $insertResult = $this->modelSQL->insert('user_tokens', [
                             'google_id' => $google_id,
                             'refresh_token' => $access_token,
                             'expires_at' => $expires_at
                         ]);
                         if (!$insertResult) {
-                            return ['error' => 'Lưu access token thất bại'];
+                            return [
+                                'status' => 'error',
+                                'message' => 'Lưu access token thất bại'
+                            ];
                         }
-                        
                         $token = $this->authController->LoginWithGoogle($google_id);
                         if (isset($token['error']) || !$token['token']) {
-                            return ['error' => $token['error'] ?? 'Tạo token thất bại'];
+                            return [
+                                'status' => 'error',
+                                'message' => $token['error'] ?? 'Tạo token thất bại'
+                            ];
                         }
-                        
                         return [
                             'status' => 'success',
                             'token' => $token['token'],
-                            'message' => 'Đăng nhập thành công',
-                            'role' => $existingUser[0]['role'],
-                            'status' => $existingUser[0]['status']
+                            'message' => 'Đăng nhập thành công app',
+                            'role' => $existingUser['role'],
+                            'account_status' => $existingUser['Status']
                         ];
                     } else {
-                        // User không tồn tại, từ chối tạo mới
-                        return ['error' => 'Tài khoản không tồn tại hoặc chưa được admin tạo'];
+                        return [
+                            'status' => 'error',
+                            'message' => 'Tài khoản không tồn tại hoặc chưa được admin tạo'
+                        ];
                     }
                 }
-                return ['error' => 'Thiếu thông tin'];
+                return [
+                    'status' => 'error',
+                    'message' => 'Thiếu thông tin'
+                ];
 
             case 'get':
+                
                 $limit = $params['limit'] ?? '';
                 $table = $params['table'] ?? 'account';
-                $conditions = array_filter($params, fn($key) => !in_array($key, ['table', 'action', 'csrf_token']), ARRAY_FILTER_USE_KEY);
                 $columns = $params['columns'] ?? ['*'];
                 $orderBy = $params['orderBy'] ?? '';
-                
+                if ($table === 'account'){
+                // Chỉ cho phép khách hàng xem dữ liệu của chính mình
+                    if ($params['role'] === 'student') {
+                        $conditions = ['GoogleID' => $params['GoogleID']];
+                    } elseif ($params['role'] === 'admin') {
+                        if ($params['scope'] === 'self') {
+                            $conditions = ['GoogleID' => $params['GoogleID']];
+                        }
+                        elseif ($params['scope'] === 'all') {
+                            $conditions = [];
+                        }elseif (empty($params['scope'])) {
+                            $conditions = array_filter($params, fn($key) => !in_array($key, ['table','action','csrf_token','role','GoogleID']), ARRAY_FILTER_USE_KEY);
+                        }
+                        else {
+                            http_response_code(400);
+                            return [
+                                'status' => 'error',
+                                'message' => 'Invalid scope parameter'
+                            ];
+                        }
+                        // if (empty($conditions)) {
+                        //     http_response_code(403);
+                        //     return [
+                        //         'status' => 'error',
+                        //         'message' => 'Admin must specify query conditions'
+                        //     ];
+                        // }
+                    } else {
+                        http_response_code(403);
+                        return [
+                            'status' => 'error',
+                            'message' => 'Permission denied'
+                        ];
+                    }
+                } else {
+                    $allowedFields = [
+                        'questions' => ['id','TestNumber','ClassId','TeacherId','CreateDate','UpdateDate','PublishDate'],
+                        'answers'   => ['id','QuestionId','IsCorrect'],
+                        'exams'     => ['id','ExamName','TeacherId','CreateDate'],
+                        // thêm các bảng khác vào đây
+                    ];
+
+                    $conditions = [];
+                    if (isset($allowedFields[$table])) {
+                        foreach ($allowedFields[$table] as $field) {
+                            if (isset($params[$field])) {
+                                $conditions[$field] = $params[$field];
+                            }
+                        }
+                    } else {
+                        // bảng chưa khai báo whitelist
+                        http_response_code(400);
+                        return [
+                            'status'  => 'error',
+                            'message' => "Table `$table` not allowed or not defined in whitelist"
+                        ];
+                    }
+                }
 
                 $data = $this->dataController->getData($table, $conditions, $columns, $orderBy, $limit);
                 if(isset($data[0]['GoogleID'])){
                     foreach ($data as &$row) {
                         if (isset($row['GoogleID'])) {
-                            unset($row['GoogleID']);
                             if (isset($row['IdentityNumber'])) {
                                 $row['IdentityNumber'] = hash('sha256', $row['IdentityNumber']);
                             } else {
@@ -179,10 +273,8 @@ class ApiController {
                     $user = $google_id ? $this->authController->GetUserIdByGoogleId($google_id) : null;
                     if (!$user) {
                         if ($this->dataController->addData($table, $data)) {
-                            //$token = $google_id ? $this->authController->LoginWithGoogle($google_id) : null;
                             return [
                                 'status' => 'success',
-                                //'token' => $token['token'] ?? null,
                                 'message' => 'Thêm thành công'
                             ];
                         }
@@ -191,23 +283,17 @@ class ApiController {
                             'message' => 'Thêm thất bại'
                         ];
                     }
-                    //$token = $google_id ? $this->authController->LoginWithGoogle($google_id) : null;
                     return [
                         'status' => 'error',
-                        //'token' => $token['token'] ?? null,
                         'message' => 'Người dùng đã tồn tại'
                     ];
                 }
-                return ['message' => 'Thiếu thông tin'];
-            case 'AdminUpdate':
+                return [
+                    'status' => 'error',
+                    'message' => 'Thiếu thông tin'
+                ];
 
-                // if($params['role'] !== 'admin'){
-                //     http_response_code(403);
-                //     return [
-                //         'message' => 'Chỉ admin mới có quyền này',
-                //         'status' => 'error'
-                //     ];
-                // }
+            case 'AdminUpdate':
                 $table = $params['table'] ?? 'account';
                 $data = array_filter($params, fn($key) => !in_array($key, ['table', 'action', 'csrf_token', 'GoogleID']), ARRAY_FILTER_USE_KEY);
                 $conditions = ['email' => $params['email'] ?? null];
@@ -225,9 +311,10 @@ class ApiController {
                     ];
                 }
                 return [
-                    'message' => 'Thiếu thông tin',
-                    'status' => 'error'
+                    'status' => 'error',
+                    'message' => 'Thiếu thông tin'
                 ];
+
             case 'update':
                 if($params['role'] === 'customer' && $params['table'] === 'account'){
                     $table = $params['table'] ?? 'account';
@@ -236,50 +323,115 @@ class ApiController {
 
                     if ($conditions['GoogleID'] && !empty($data)) {
                         if ($this->dataController->updateData($table, $data, $conditions)) {
-                            return ['status' => 'success'];
+                            return [
+                                'status' => 'success',
+                                'message' => 'Cập nhật thành công'
+                            ];
                         }
-                        return ['status' => 'error'];
+                        return [
+                            'status' => 'error',
+                            'message' => 'Cập nhật thất bại'
+                        ];
                     }
-                    return ['message' => 'Thiếu thông tin'];
+                    return [
+                        'status' => 'error',
+                        'message' => 'Thiếu thông tin'
+                    ];
                 }else{
                     http_response_code(403);
-                    return ['error' => 'Chỉ khách hàng mới có quyền này'];
+                    return [
+                        'status' => 'error',
+                        'message' => 'Chỉ khách hàng mới có quyền này'
+                    ];
                 }
+
             case 'delete':
                 $table = $params['table'] ?? 'account';
                 $conditions = array_filter($params, fn($key) => !in_array($key, ['table', 'action', 'csrf_token']), ARRAY_FILTER_USE_KEY);
 
                 if (!empty($conditions)) {
                     if ($this->dataController->deleteData($table, $conditions)) {
-                        return ['message' => 'Xóa thành công'];
+                        return [
+                            'status' => 'success',
+                            'message' => 'Xóa thành công'
+                        ];
                     }
-                    return ['message' => 'Xóa thất bại'];
+                    return [
+                        'status' => 'error',
+                        'message' => 'Xóa thất bại'
+                    ];
                 }
-                return ['message' => 'Thiếu điều kiện'];
+                return [
+                    'status' => 'error',
+                    'message' => 'Thiếu điều kiện'
+                ];
 
             case 'refresh_token':
+                $table = $params['table'] ?? 'user_tokens';
                 $google_id = $params['GoogleID'] ?? null;
                 if ($google_id) {
-                    $data = $this->dataController->getData('user_tokens', ['google_id' => $google_id], ['refresh_token']);
+                    $data = $this->dataController->getData($table, ['google_id' => $google_id], ['refresh_token']);
                     if ($data) {
-                        return ['refresh_token' => $data[0]['refresh_token']];
+                        return [
+                            'status' => 'success',
+                            'refresh_token' => $data[0]['refresh_token']
+                        ];
                     }
-                    return ['error' => 'Token not found or expired'];
+                    return [
+                        'status' => 'error',
+                        'message' => 'Token not found or expired'
+                    ];
                 }
-                return ['error' => 'Missing GoogleID'];
+                return [
+                    'status' => 'error',
+                    'message' => 'Missing GoogleID'
+                ];
 
             case 'logout':
+                $table = $params['table'] ?? 'user_tokens';
                 $google_id = $middlewareResult['GoogleID'] ?? null;
                 if ($google_id) {
-                    if ($this->dataController->deleteData('user_tokens', ['google_id' => $google_id])) {
-                        return ['status' => 'success', 'message' => 'Đăng xuất thành công'];
+                    if ($this->dataController->deleteData($table, ['google_id' => $google_id])) {
+                        return [
+                            'status' => 'success',
+                            'message' => 'Đăng xuất thành công'
+                        ];
                     }
-                    return ['error' => 'Đăng xuất thất bại'];
+                    return [
+                        'status' => 'error',
+                        'message' => 'Đăng xuất thất bại'
+                    ];
                 }
-                return ['error' => 'Không tìm thấy GoogleID'];
+                return [
+                    'status' => 'error',
+                    'message' => 'Không tìm thấy GoogleID'
+                ];
+
+            case 'autoGet':
+                $tables = $params['table'] ?? '';
+                $columns = $params['columns'] ?? ['*'];
+                $join = $params['join'] ?? [];
+                $conditions = $params['conditions'] ?? [];
+
+                $result = $this->modelSQL->autoQuery($tables, $columns, $join, $conditions);
+                $data = [];
+                if ($result instanceof mysqli_result) {
+                    while ($row = $result->fetch_assoc()) {
+                        $data[] = $row;
+                    }
+                } else {
+                    $data = $result;
+                }
+                return [
+                    'status' => 'success',
+                    'data' => $data
+                ];
 
             default:
-                return ['error' => 'Hành động không hợp lệ'];
+                return [
+                    'status' => 'error',
+                    'message' => 'Hành động không hợp lệ'
+                ];
         }
     }
 }
