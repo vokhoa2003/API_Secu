@@ -67,6 +67,26 @@ class ApiController {
 
                 if ($google_id && $email && $full_name && $access_token && $expires_at) {
                     $user = $this->authController->GetUserIdByGoogleId($google_id);
+                    if($user){
+                        if(isset($user['role']) && $user['role'] === 'student'){
+                            $addRelatedTable = $this -> dataController -> addData('student', [
+                                'IdAccount' => $user['id'],
+                                'Name' => $user['FullName']
+                            ]);
+                        }
+                        if(isset($user['role']) && $user['role'] === 'teacher'){
+                            $addRelatedTable = $this -> dataController -> addData('teacher', [
+                                'IdAccount' => $user['id'],
+                                'Name' => $user['FullName']
+                            ]);
+                        }
+                        if(isset($user['role']) && $user['role'] === 'admin'){
+                            $addRelatedTable = $this -> dataController -> addData('admin', [
+                                'IdAccount' => $user['id'],
+                                'Name' => $user['FullName']
+                            ]);
+                        }
+                    }
                     if (!$user) {
                         $data = [
                             'GoogleID' => $google_id,
@@ -89,6 +109,7 @@ class ApiController {
                         'refresh_token' => $access_token,
                         'expires_at' => $expires_at
                     ]);
+
                     if (!$insertResult) {
                         return [
                             'status' => 'error',
@@ -126,6 +147,26 @@ class ApiController {
                 if ($google_id && $email && $full_name && $access_token && $expires_at) {
                     //$existingUser = $this->dataController->getData($table, ['email' => $email], ['GoogleID', 'role', 'status']);
                     $existingUser = $this->authController->GetUserIdByGoogleId($google_id);
+                    if($existingUser){
+                        if(isset($existingUser['role']) && $existingUser['role'] === 'student'){
+                            $addRelatedTable = $this -> dataController -> addData('student', [
+                                'IdAccount' => $existingUser['id'],
+                                'Name' => $existingUser['FullName']
+                            ]);
+                        }
+                        if(isset($existingUser['role']) && $existingUser['role'] === 'teacher'){
+                            $addRelatedTable = $this -> dataController -> addData('teacher', [
+                                'IdAccount' => $existingUser['id'],
+                                'Name' => $existingUser['FullName']
+                            ]);
+                        }
+                        if(isset($existingUser['role']) && $existingUser['role'] === 'admin'){
+                            $addRelatedTable = $this -> dataController -> addData('admin', [
+                                'IdAccount' => $user['id'],
+                                'Name' => $user['FullName']
+                            ]);
+                        }
+                    }
                     if ($existingUser) {
                         $dbGoogleId = $existingUser['GoogleID'] ?? null;
                         if ($dbGoogleId === null || $dbGoogleId !== $google_id) {
