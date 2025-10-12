@@ -28,32 +28,32 @@ class ApiController {
     }
 
     public function handleRequest($action, $params) {
-        // error_log("Action: $action");
-        // error_log("Params: " . print_r($params, true));
+        error_log("Action: $action");
+        error_log("Params: " . print_r($params, true));
 
         // // Kiểm tra CSRF token cho các phương thức thay đổi dữ liệu
-        // if (!$this->checkCsrf($params)) {
-        //     return [
-        //         'status' => 'error',
-        //         'message' => 'Invalid CSRF token'
-        //     ];
-        // }
+        if (!$this->checkCsrf($params)) {
+            return [
+                'status' => 'error',
+                'message' => 'Invalid CSRF token'
+            ];
+        }
 
-        // //Chỉ xác thực token với các action cần bảo vệ
-        // $actionsRequireAuth = ['get', 'update', 'delete', 'logout', 'refresh_token'];
-        // if (in_array($action, $actionsRequireAuth)) {
-        //     $middlewareResult = AuthMiddleware::verifyRequest($action);
-        //     if (isset($middlewareResult['error'])) {
-        //         http_response_code(401);
-        //         return [
-        //             'status' => 'error',
-        //             'message' => $middlewareResult['error']
-        //         ];
-        //     }
-        //     // Luôn lấy GoogleID và role từ token đã xác thực
-        //     $params['GoogleID'] = $middlewareResult['GoogleID'];
-        //     $params['role'] = $middlewareResult['role'];
-        // }
+        //Chỉ xác thực token với các action cần bảo vệ
+        $actionsRequireAuth = ['get', 'update', 'delete', 'logout', 'refresh_token'];
+        if (in_array($action, $actionsRequireAuth)) {
+            $middlewareResult = AuthMiddleware::verifyRequest($action);
+            if (isset($middlewareResult['error'])) {
+                http_response_code(401);
+                return [
+                    'status' => 'error',
+                    'message' => $middlewareResult['error']
+                ];
+            }
+            // Luôn lấy GoogleID và role từ token đã xác thực
+            $params['GoogleID'] = $middlewareResult['GoogleID'];
+            $params['role'] = $middlewareResult['role'];
+        }
         switch ($action) {
             case 'login':
                 $table = $params['table'] ?? 'account';
@@ -67,27 +67,47 @@ class ApiController {
 
                 if ($google_id && $email && $full_name && $access_token && $expires_at) {
                     $user = $this->authController->GetUserIdByGoogleId($google_id);
-                    if($user){
-                        if(isset($user['role']) && $user['role'] === 'student'){
-                            $addRelatedTable = $this -> dataController -> addData('student', [
-                                'IdAccount' => $user['id'],
-                                'Name' => $user['FullName']
-                            ]);
-                        }
-                        if(isset($user['role']) && $user['role'] === 'teacher'){
-                            $addRelatedTable = $this -> dataController -> addData('teacher', [
-                                'IdAccount' => $user['id'],
-                                'Name' => $user['FullName']
-                            ]);
-                        }
-                        if(isset($user['role']) && $user['role'] === 'admin'){
-                            $addRelatedTable = $this -> dataController -> addData('admin', [
-                                'IdAccount' => $user['id'],
-                                'Name' => $user['FullName']
-                            ]);
+                    //-----------------------Xử lý chi tiết người dùng khi đăng nhập lần đầu--------------------
+                    if($user['role'] === 'admin'){
+                        $tableDetails = ['account','admin'];
+                    }
+                    else if($user['role'] === 'teacher'){
+                        $tableDetails = ['account','teacher'];
+                    }
+                    else if($user['role'] === 'student'){
+                        $tableDetails = ['account','student'];
+                    }
+                    $columns = $params['columns'] ?? ['*'];
+                    $join = ['type' => 'inner', 'on' => ['account.Id = ' . $tableDetails[1] . '.IdAccount']];
+                    $conditions = ['account.email' => $user['email']];;
+
+                    $result = $this->modelSQL->autoQuery($tableDetails, $columns, $join, $conditions);
+                    $data = [];
+                    if ($result instanceof mysqli_result) {
+                        if($result->num_rows <= 0 ) {
+                            if(isset($user['role']) && $user['role'] === 'student'){
+                                $addRelatedTable = $this -> dataController -> addData('student', [
+                                    'IdAccount' => $user['id'],
+                                    'Name' => $user['FullName']
+                                ]);
+                            }
+                            if(isset($user['role']) && $user['role'] === 'teacher'){
+                                $addRelatedTable = $this -> dataController -> addData('teacher', [
+                                    'IdAccount' => $user['id'],
+                                    'Name' => $user['FullName']
+                                ]);
+                            }
+                            if(isset($user['role']) && $user['role'] === 'admin'){
+                                $addRelatedTable = $this -> dataController -> addData('admin', [
+                                    'IdAccount' => $user['id'],
+                                    'Name' => $user['FullName']
+                                ]);
+                            }
                         }
                     }
-                    if (!$user) {
+
+                    //------------------------------------------------------------------------------------------
+                    if(!$user){
                         $data = [
                             'GoogleID' => $google_id,
                             'email' => $email,
@@ -95,7 +115,27 @@ class ApiController {
                             'role' => $role,
                             'status' => $status
                         ];
-                        $addUserResult = $this->dataController->addData($table, $data);
+                        $addUserResult = $this->dataController->addData('account', $data);
+                        if($addUserResult){
+                            if(isset($user['role']) && $user['role'] === 'student'){
+                            $addRelatedTable = $this -> dataController -> addData('student', [
+                                'IdAccount' => $user['id'],
+                                'Name' => $user['FullName']
+                            ]);
+                            }
+                            if(isset($user['role']) && $user['role'] === 'teacher'){
+                                $addRelatedTable = $this -> dataController -> addData('teacher', [
+                                    'IdAccount' => $user['id'],
+                                    'Name' => $user['FullName']
+                                ]);
+                            }
+                            if(isset($user['role']) && $user['role'] === 'admin'){
+                                $addRelatedTable = $this -> dataController -> addData('admin', [
+                                    'IdAccount' => $user['id'],
+                                    'Name' => $user['FullName']
+                                ]);
+                            }
+                        }
                         if (!$addUserResult) {
                             return [
                                 'status' => 'error',
@@ -147,6 +187,7 @@ class ApiController {
                 if ($google_id && $email && $full_name && $access_token && $expires_at) {
                     //$existingUser = $this->dataController->getData($table, ['email' => $email], ['GoogleID', 'role', 'status']);
                     $existingUser = $this->authController->GetUserIdByGoogleId($google_id);
+
                     if($existingUser){
                         if(isset($existingUser['role']) && $existingUser['role'] === 'student'){
                             $addRelatedTable = $this -> dataController -> addData('student', [
@@ -224,10 +265,10 @@ class ApiController {
                 if ($table === 'account'){
                 // Chỉ cho phép khách hàng xem dữ liệu của chính mình
                     if ($params['role'] === 'student') {
-                        $conditions = ['GoogleID' => $params['GoogleID']];
+                        $conditions = ['email' => $params['email']];
                     } elseif ($params['role'] === 'admin') {
                         if ($params['scope'] === 'self') {
-                            $conditions = ['GoogleID' => $params['GoogleID']];
+                            $conditions = ['email' => $params['email']];
                         }
                         elseif ($params['scope'] === 'all') {
                             $conditions = [];
@@ -248,38 +289,18 @@ class ApiController {
                         //         'message' => 'Admin must specify query conditions'
                         //     ];
                         // }
-                    } else {
+                    }
+                    else if ($params['role'] === 'teacher'){
+                        $conditions = ['email' => $params['email']];
+                    }   
+                     else {
                         http_response_code(403);
                         return [
                             'status' => 'error',
                             'message' => 'Permission denied'
                         ];
                     }
-                } else {
-                    $allowedFields = [
-                        'questions' => ['id','TestNumber','ClassId','TeacherId','CreateDate','UpdateDate','PublishDate'],
-                        'answers'   => ['id','QuestionId','IsCorrect'],
-                        'exams'     => ['id','ExamName','TeacherId','CreateDate'],
-                        // thêm các bảng khác vào đây
-                    ];
-
-                    $conditions = [];
-                    if (isset($allowedFields[$table])) {
-                        foreach ($allowedFields[$table] as $field) {
-                            if (isset($params[$field])) {
-                                $conditions[$field] = $params[$field];
-                            }
-                        }
-                    } else {
-                        // bảng chưa khai báo whitelist
-                        http_response_code(400);
-                        return [
-                            'status'  => 'error',
-                            'message' => "Table `$table` not allowed or not defined in whitelist"
-                        ];
-                    }
-                }
-
+                } 
                 $data = $this->dataController->getData($table, $conditions, $columns, $orderBy, $limit);
                 if(isset($data[0]['GoogleID'])){
                     foreach ($data as &$row) {
@@ -449,6 +470,7 @@ class ApiController {
                 ];
 
             case 'autoGet':
+                $method = $params['method'] ?? '';
                 $tables = $params['table'] ?? '';
                 $columns = $params['columns'] ?? ['*'];
                 $join = $params['join'] ?? [];
@@ -467,7 +489,16 @@ class ApiController {
                     'status' => 'success',
                     'data' => $data
                 ];
+            case 'autoUpdate':
+                $table = $params['table'] ?? '';
+                $data = $params['data'] ?? [];
+                $method = $params['method'] ?? 'UPSERT';
 
+                $result = $this->modelSQL->autoUpdate($table, $data, $method);
+                return [
+                    'status' => $result['status'],
+                    'message' => $result['message']
+                ];
             default:
                 return [
                     'status' => 'error',

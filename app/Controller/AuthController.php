@@ -36,7 +36,7 @@ class AuthController{
             return ["error" => "User is inactive"];
             exit;
         }
-        $token = $this->jwtHandler->createToken($user['GoogleID'], $user['role']);
+        $token = $this->jwtHandler->createToken($user['email'], $user['role'], $user['id'], $user['FullName']);
         error_log("Generated token: " . ($token ?? 'Null'));
         // json_encode(array("token" => $token));
         if(!isset($token) || empty($token)){

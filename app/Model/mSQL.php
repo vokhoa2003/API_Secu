@@ -36,7 +36,15 @@ class ModelSQL extends Connect {
         }
 
         $stmt->execute();
-        $result = $stmt->get_result() ?: $stmt->affected_rows;
+        //$result = $stmt->get_result() ?: $stmt->affected_rows;
+        if (stripos(trim($sql), 'select') === 0) {
+            // Nếu là SELECT thì phải dùng get_result()
+            $result = $stmt->get_result();
+        } else {
+            // Các truy vấn khác như INSERT/UPDATE/DELETE
+            $result = $stmt->affected_rows;
+        }
+
         $stmt->close();
         return $result;
     }
@@ -163,20 +171,60 @@ class ModelSQL extends Connect {
     /**
      * Tự động tạo truy vấn SELECT với JOIN và điều kiện
      */
+    // public function autoQuery($tables, $columns = ['*'], $join = [], $conditions = []) {
+    //     $sql = "SELECT " . implode(", ", $columns) . " FROM ";
+    //     $params = [];
+    //     $types = '';
+
+    //     if (is_array($tables)) {
+    //         $sql .= $tables[0];
+    //         if (!empty($join) && isset($join['type'], $join['on'], $tables[1])) {
+    //             $sql .= " {$join['type']} JOIN {$tables[1]} ON " . implode(" AND ", $join['on']);
+    //         }
+    //     } else {
+    //         $sql .= $tables;
+    //     }
+
+    //     if (!empty($conditions)) {
+    //         $sql .= " WHERE ";
+    //         $conds = [];
+    //         foreach ($conditions as $field => $value) {
+    //             $conds[] = "$field = ?";
+    //             $params[] = $value;
+    //             $types .= is_int($value) ? 'i' : 's';
+    //         }
+    //         $sql .= implode(" AND ", $conds);
+    //     }
+
+    //     return $this->executeQuery($sql, $params, $types);
+    // }
     public function autoQuery($tables, $columns = ['*'], $join = [], $conditions = []) {
+        // 1️⃣ Bắt đầu câu SQL cơ bản
         $sql = "SELECT " . implode(", ", $columns) . " FROM ";
+
         $params = [];
         $types = '';
 
-        if (is_array($tables)) {
+        // 2️⃣ Xử lý bảng chính
+        if (is_array($tables) && count($tables) > 0) {
             $sql .= $tables[0];
-            if (!empty($join) && isset($join['type'], $join['on'], $tables[1])) {
-                $sql .= " {$join['type']} JOIN {$tables[1]} ON " . implode(" AND ", $join['on']);
+
+            // 3️⃣ Duyệt từng phần tử join
+            if (!empty($join) && is_array($join)) {
+                for ($i = 0; $i < count($join); $i++) {
+                    if (!isset($tables[$i + 1])) break; // tránh lỗi nếu thiếu bảng
+                    $joinType = strtoupper($join[$i]['type'] ?? 'INNER');
+                    $joinOn = $join[$i]['on'] ?? [];
+                    if (!empty($joinOn)) {
+                        $sql .= " {$joinType} JOIN {$tables[$i + 1]} ON " . implode(" AND ", $joinOn);
+                    }
+                }
             }
         } else {
             $sql .= $tables;
         }
 
+        // 4️⃣ Xử lý điều kiện WHERE
         if (!empty($conditions)) {
             $sql .= " WHERE ";
             $conds = [];
@@ -188,11 +236,182 @@ class ModelSQL extends Connect {
             $sql .= implode(" AND ", $conds);
         }
 
+        // 5️⃣ Debug in ra câu SQL (tùy chọn)
+        // error_log("AUTOQUERY SQL: " . $sql);
+
+        // 6️⃣ Thực thi truy vấn
         return $this->executeQuery($sql, $params, $types);
     }
+
+    public function autoUpdate($table, $data = [], $method = 'UPSERT') {
+        if (empty($table) || empty($data)) {
+            return ['status' => 'error', 'message' => 'Thiếu dữ liệu table hoặc data'];
+        }
+
+        try {
+            foreach ($data as $row) {
+                $columns = [];
+                $placeholders = [];
+                $updates = [];
+                $params = [];
+                $types = '';
+
+                foreach ($row as $key => $val) {
+                    $col = strpos($key, '.') !== false ? explode('.', $key)[1] : $key;
+                    $columns[] = "`$col`";
+                    $placeholders[] = '?';
+                    $updates[] = "`$col` = VALUES(`$col`)";
+                    $params[] = $val;
+                    $types .= is_int($val) ? 'i' : 's';
+                }
+
+                if (strtoupper($method) === 'UPSERT') {
+                    $sql = "INSERT INTO `$table` (" . implode(", ", $columns) . ")
+                            VALUES (" . implode(", ", $placeholders) . ")
+                            ON DUPLICATE KEY UPDATE " . implode(", ", $updates);
+                } elseif (strtoupper($method) === 'INSERT') {
+                    $sql = "INSERT INTO `$table` (" . implode(", ", $columns) . ")
+                            VALUES (" . implode(", ", $placeholders) . ")";
+                } else { // UPDATE
+                    if (!isset($row['questions.id'])) {
+                        throw new Exception("Thiếu khóa chính questions.id để UPDATE");
+                    }
+                    $whereCol = "QuestionId";
+                    $sql = "UPDATE `$table` SET " . implode(", ", array_map(fn($c) => "$c = ?", $columns)) . " 
+                            WHERE `$whereCol` = ?";
+                    $params[] = $row['questions.id'];
+                    $types .= is_int($row['questions.id']) ? 'i' : 's';
+                }
+
+                $this->executeQuery($sql, $params, $types);
+            }
+
+            return ['status' => 'success', 'message' => 'Cập nhật thành công'];
+        } catch (Exception $e) {
+            return ['status' => 'error', 'message' => $e->getMessage()];
+        }
+    }
+
 }
 
-// require_once __DIR__ .'/mConnect.php';
+    /**
+     * Tự động chèn một hoặc nhiều hàng vào một bảng bằng cách sử dụng một giao dịch.
+     * @param string $table Tên bảng.
+     * @param array $data Dữ liệu để chèn. Có thể là một mảng kết hợp cho một hàng hoặc một mảng của các mảng kết hợp cho nhiều hàng.
+     * @return bool Trả về true nếu thành công, false nếu thất bại.
+     */
+//     public function autoInsert($table, $data) {
+//         if (empty($data)) {
+//             return false;
+//         }
+//         // Nếu dữ liệu là một hàng đơn, hãy đặt nó vào một mảng để xử lý nhất quán
+//         if (!is_array(reset($data))) {
+//             $data = [$data];
+//         }
+
+//         $con = $this->openDB();
+//         $con->begin_transaction();
+
+//         try {
+//             // Lấy các cột từ hàng đầu tiên
+//             $columns = array_keys($data[0]);
+//             $columnSql = implode('`, `', $columns);
+//             $placeholderSql = implode(', ', array_fill(0, count($columns), '?'));
+//             $sql = "INSERT INTO `$table` (`$columnSql`) VALUES ($placeholderSql)";
+//             $stmt = $con->prepare($sql);
+
+//             // Xác định các loại tham số từ hàng đầu tiên
+//             $types = '';
+//             foreach ($data[0] as $value) {
+//                 if (is_int($value)) $types .= 'i';
+//                 elseif (is_float($value)) $types .= 'd';
+//                 else $types .= 's';
+//             }
+
+//             foreach ($data as $row) {
+//                 if (count($row) != count($columns)) {
+//                     throw new Exception("Số lượng cột không khớp.");
+//                 }
+//                 $stmt->bind_param($types, ...array_values($row));
+//                 $stmt->execute();
+//             }
+
+//             $con->commit();
+//             return true;
+//         } catch (Exception $e) {
+//             $con->rollback();
+//             // Ghi lại lỗi nếu cần
+//             error_log('autoInsert failed: ' . $e->getMessage());
+//             return false;
+//         }
+//     }
+
+//     /**
+//      * Tự động cập nhật các hàng trong một bảng dựa trên các điều kiện.
+//      * @param string $table Tên bảng.
+//      * @param array $data Một mảng kết hợp của dữ liệu để cập nhật (cột => giá trị).
+//      * @param array $conditions Một mảng kết hợp của các điều kiện cho mệnh đề WHERE (cột => giá trị).
+//      * @return bool Trả về true nếu thành công, false nếu thất bại.
+//      */
+//     public function autoUpdate($table, $data, $conditions) {
+//         if (empty($data) || empty($conditions)) {
+//             return false;
+//         }
+
+//         $params = [];
+//         $types = '';
+
+//         $setClauses = [];
+//         foreach ($data as $key => $value) {
+//             $setClauses[] = "`$key` = ?";
+//             $params[] = $value;
+//             if (is_int($value)) $types .= 'i';
+//             elseif (is_float($value)) $types .= 'd';
+//             else $types .= 's';
+//         }
+//         $sql = "UPDATE `$table` SET " . implode(', ', $setClauses);
+
+//         $whereClauses = [];
+//         foreach ($conditions as $key => $value) {
+//             $whereClauses[] = "`$key` = ?";
+//             $params[] = $value;
+//             if (is_int($value)) $types .= 'i';
+//             elseif (is_float($value)) $types .= 'd';
+//             else $types .= 's';
+//         }
+//         $sql .= " WHERE " . implode(' AND ', $whereClauses);
+
+//         return $this->executeQuery($sql, $params, $types) !== false;
+//     }
+
+//     /**
+//      * Tự động xóa các hàng khỏi một bảng dựa trên các điều kiện.
+//      * @param string $table Tên bảng.
+//      * @param array $conditions Một mảng kết hợp của các điều kiện cho mệnh đề WHERE (cột => giá trị).
+//      * @return bool Trả về true nếu thành công, false nếu thất bại.
+//      */
+//     public function autoDelete($table, $conditions) {
+//         if (empty($conditions)) {
+//             return false; // Ngăn chặn việc vô tình xóa tất cả các hàng
+//         }
+
+//         $params = [];
+//         $types = '';
+//         $whereClauses = [];
+//         foreach ($conditions as $key => $value) {
+//             $whereClauses[] = "`$key` = ?";
+//             $params[] = $value;
+//             if (is_int($value)) $types .= 'i';
+//             elseif (is_float($value)) $types .= 'd';
+//             else $types .= 's';
+//         }
+//         $sql = "DELETE FROM `$table` WHERE " . implode(' AND ', $whereClauses);
+
+//         return $this->executeQuery($sql, $params, $types) !== false;
+//     }
+// }
+
+// // require_once __DIR__ .'/mConnect.php';
 //     class ModelSQL extends connect{
 //         public function UpSQL($sql){       
 //             $con = $this->OpenDB(); 

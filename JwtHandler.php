@@ -10,7 +10,7 @@ if (!class_exists('JwtHandler')) {
             $this->secret = $config['secret_key'];
 
         }
-        public function createToken($google_id, $role)
+        public function createToken($email, $role, $id, $fullname)
         {
             $header = json_encode(['typ' => 'JWT', 'alg' => 'HS256']);
             $payload = json_encode([
@@ -19,8 +19,10 @@ if (!class_exists('JwtHandler')) {
                 "iat" => time(),
                 "exp" => time() + 3600,
                 "data" =>[
-                    "GoogleID" => $google_id,
-                    "role" => $role
+                    "email" => $email,
+                    "role" => $role,
+                    "id" => $id,
+                    "FullName" => $fullname
                 ],
             ]);
 
