@@ -65,87 +65,71 @@ class ApiController {
                 $access_token = $params['access_token'] ?? null;
                 $expires_at = $params['expires_at'] ?? null;
 
-                if ($google_id && $email && $full_name && $access_token && $expires_at) {
-                    $user = $this->authController->GetUserIdByGoogleId($google_id);
-                    //-----------------------Xử lý chi tiết người dùng khi đăng nhập lần đầu--------------------
-                    if($user['role'] === 'admin'){
-                        $tableDetails = ['account','admin'];
-                    }
-                    else if($user['role'] === 'teacher'){
-                        $tableDetails = ['account','teacher'];
-                    }
-                    else if($user['role'] === 'student'){
-                        $tableDetails = ['account','student'];
-                    }
-                    $columns = $params['columns'] ?? ['*'];
-                    $join = ['type' => 'inner', 'on' => ['account.Id = ' . $tableDetails[1] . '.IdAccount']];
-                    $conditions = ['account.email' => $user['email']];;
-
-                    $result = $this->modelSQL->autoQuery($tableDetails, $columns, $join, $conditions);
-                    $data = [];
-                    if ($result instanceof mysqli_result) {
-                        if($result->num_rows <= 0 ) {
-                            if(isset($user['role']) && $user['role'] === 'student'){
-                                $addRelatedTable = $this -> dataController -> addData('student', [
-                                    'IdAccount' => $user['id'],
-                                    'Name' => $user['FullName']
-                                ]);
-                            }
-                            if(isset($user['role']) && $user['role'] === 'teacher'){
-                                $addRelatedTable = $this -> dataController -> addData('teacher', [
-                                    'IdAccount' => $user['id'],
-                                    'Name' => $user['FullName']
-                                ]);
-                            }
-                            if(isset($user['role']) && $user['role'] === 'admin'){
-                                $addRelatedTable = $this -> dataController -> addData('admin', [
-                                    'IdAccount' => $user['id'],
-                                    'Name' => $user['FullName']
-                                ]);
-                            }
-                        }
+                if ($email && $full_name && $access_token && $expires_at) {
+                    // ưu tiên tìm bằng GoogleID nếu có
+                    $user = null;
+                    if ($google_id) {
+                        $user = $this->authController->GetUserIdByGoogleId($google_id);
                     }
 
-                    //------------------------------------------------------------------------------------------
-                    if(!$user){
-                        $data = [
-                            'GoogleID' => $google_id,
-                            'email' => $email,
-                            'FullName' => $full_name,
-                            'role' => $role,
-                            'status' => $status
+                    // Nếu chưa tìm thấy bằng GoogleID thì thử tìm bằng email
+                    if (!$user && $email) {
+                        $user = $this->authController->GetUserByEmail($email);
+                    }
+
+                    // Nếu vẫn không có user -> CHẶN (không tự tạo)
+                    if (!$user) {
+                        return [
+                            'status' => 'error',
+                            'message' => 'Tài khoản không tồn tại. Vui lòng liên hệ quản trị để đăng ký.'
                         ];
-                        $addUserResult = $this->dataController->addData('account', $data);
-                        if($addUserResult){
-                            if(isset($user['role']) && $user['role'] === 'student'){
-                            $addRelatedTable = $this -> dataController -> addData('student', [
-                                'IdAccount' => $user['id'],
-                                'Name' => $user['FullName']
-                            ]);
-                            }
-                            if(isset($user['role']) && $user['role'] === 'teacher'){
-                                $addRelatedTable = $this -> dataController -> addData('teacher', [
-                                    'IdAccount' => $user['id'],
-                                    'Name' => $user['FullName']
-                                ]);
-                            }
-                            if(isset($user['role']) && $user['role'] === 'admin'){
-                                $addRelatedTable = $this -> dataController -> addData('admin', [
-                                    'IdAccount' => $user['id'],
-                                    'Name' => $user['FullName']
-                                ]);
-                            }
+                    }
+
+                    // Nếu tìm được user bằng email nhưng GoogleID chưa lưu và params có GoogleID -> cập nhật
+                    if (!empty($google_id) && (empty($user['GoogleID']) || $user['GoogleID'] !== $google_id)) {
+                        $updateCond = [];
+                        // nếu có id trong record thì dùng id để update, ngược lại dùng email
+                        if (!empty($user['id'])) {
+                            $updateCond = ['id' => $user['id']];
+                        } else {
+                            $updateCond = ['email' => $email];
                         }
-                        if (!$addUserResult) {
-                            return [
-                                'status' => 'error',
-                                'message' => 'Thêm người dùng thất bại'
-                            ];
+                        $this->dataController->updateData('account', ['GoogleID' => $google_id], $updateCond);
+                        // tải lại user
+                        $user = $this->authController->GetUserIdByGoogleId($google_id) ?: ($this->authController->GetUserByEmail($email) ?? $user);
+                    }
+
+                    // Đảm bảo bảng chi tiết (student/teacher/admin) có bản ghi liên quan
+                    $userRole = $user['role'] ?? $role;
+                    if ($userRole === 'student') {
+                        $exists = $this->dataController->getData('student', ['IdAccount' => $user['id']]);
+                        if (!$exists) {
+                            $this->dataController->addData('student', [
+                                'IdAccount' => $user['id'],
+                                'Name' => $user['FullName'] ?? $full_name
+                            ]);
+                        }
+                    } elseif ($userRole === 'teacher') {
+                        $exists = $this->dataController->getData('teacher', ['IdAccount' => $user['id']]);
+                        if (!$exists) {
+                            $this->dataController->addData('teacher', [
+                                'IdAccount' => $user['id'],
+                                'Name' => $user['FullName'] ?? $full_name
+                            ]);
+                        }
+                    } elseif ($userRole === 'admin') {
+                        $exists = $this->dataController->getData('admin', ['IdAccount' => $user['id']]);
+                        if (!$exists) {
+                            $this->dataController->addData('admin', [
+                                'IdAccount' => $user['id'],
+                                'Name' => $user['FullName'] ?? $full_name
+                            ]);
                         }
                     }
 
+                    // Lưu token (refresh_token)
                     $insertResult = $this->modelSQL->insert('user_tokens', [
-                        'google_id' => $google_id,
+                        'google_id' => $google_id ?? ($user['GoogleID'] ?? null),
                         'refresh_token' => $access_token,
                         'expires_at' => $expires_at
                     ]);
@@ -157,7 +141,7 @@ class ApiController {
                         ];
                     }
 
-                    $token = $this->authController->LoginWithGoogle($google_id);
+                    $token = $this->authController->LoginWithGoogle($google_id ?? ($user['GoogleID'] ?? null));
                     if (isset($token['error']) || !$token['token']) {
                         return [
                             'status' => 'error',
@@ -167,7 +151,7 @@ class ApiController {
                     return [
                         'status' => 'success',
                         'token' => $token['token'],
-                        'message' => $user ? 'Đăng nhập thành công' : 'Thêm và đăng nhập thành công'
+                        'message' => 'Đăng nhập thành công'
                     ];
                 }
                 return [
@@ -184,72 +168,89 @@ class ApiController {
                 $access_token = $params['access_token'] ?? null;
                 $expires_at = $params['expires_at'] ?? null;
 
-                if ($google_id && $email && $full_name && $access_token && $expires_at) {
-                    //$existingUser = $this->dataController->getData($table, ['email' => $email], ['GoogleID', 'role', 'status']);
-                    $existingUser = $this->authController->GetUserIdByGoogleId($google_id);
+                if ($email && $full_name && $access_token && $expires_at) {
+                    // Tìm user theo GoogleID nếu có
+                    $existingUser = null;
+                    if ($google_id) {
+                        $existingUser = $this->authController->GetUserIdByGoogleId($google_id);
+                    }
 
-                    if($existingUser){
-                        if(isset($existingUser['role']) && $existingUser['role'] === 'student'){
-                            $addRelatedTable = $this -> dataController -> addData('student', [
+                    // Nếu không tìm thấy bằng GoogleID thì tìm bằng email
+                    if (!$existingUser && $email) {
+                        $existingUser = $this->authController->GetUserByEmail($email);
+                    }
+
+                    // Nếu không tồn tại -> CHẶN (không tự tạo)
+                    if (!$existingUser) {
+                        return [
+                            'status' => 'error',
+                            'message' => 'Tài khoản không tồn tại. Vui lòng đăng ký trước.'
+                        ];
+                    }
+
+                    // Nếu tồn tại theo email nhưng GoogleID trong DB khác hoặc rỗng và params cung cấp GoogleID -> cập nhật
+                    if (!empty($google_id) && (empty($existingUser['GoogleID']) || $existingUser['GoogleID'] !== $google_id)) {
+                        $updateCond = !empty($existingUser['id']) ? ['id' => $existingUser['id']] : ['email' => $email];
+                        $this->dataController->updateData('account', ['GoogleID' => $google_id], $updateCond);
+                        // reload
+                        $existingUser = $this->authController->GetUserIdByGoogleId($google_id) ?: ($this->authController->GetUserByEmail($email) ?? $existingUser);
+                    }
+
+                    // Tạo bản ghi liên quan nếu cần
+                    if(isset($existingUser['role']) && $existingUser['role'] === 'student'){
+                        $exists = $this->dataController->getData('student', ['IdAccount' => $existingUser['id']]);
+                        if (!$exists) {
+                            $this->dataController->addData('student', [
                                 'IdAccount' => $existingUser['id'],
-                                'Name' => $existingUser['FullName']
+                                'Name' => $existingUser['FullName'] ?? $full_name
                             ]);
                         }
-                        if(isset($existingUser['role']) && $existingUser['role'] === 'teacher'){
-                            $addRelatedTable = $this -> dataController -> addData('teacher', [
+                    }
+                    if(isset($existingUser['role']) && $existingUser['role'] === 'teacher'){
+                        $exists = $this->dataController->getData('teacher', ['IdAccount' => $existingUser['id']]);
+                        if (!$exists) {
+                            $this->dataController->addData('teacher', [
                                 'IdAccount' => $existingUser['id'],
-                                'Name' => $existingUser['FullName']
+                                'Name' => $existingUser['FullName'] ?? $full_name
                             ]);
                         }
-                        if(isset($existingUser['role']) && $existingUser['role'] === 'admin'){
-                            $addRelatedTable = $this -> dataController -> addData('admin', [
+                    }
+                    if(isset($existingUser['role']) && $existingUser['role'] === 'admin'){
+                        $exists = $this->dataController->getData('admin', ['IdAccount' => $existingUser['id']]);
+                        if (!$exists) {
+                            $this->dataController->addData('admin', [
                                 'IdAccount' => $existingUser['id'],
                                 //'Name' => $existingUser['FullName']
                             ]);
                         }
                     }
-                    if ($existingUser) {
-                        $dbGoogleId = $existingUser['GoogleID'] ?? null;
-                        if ($dbGoogleId === null || $dbGoogleId !== $google_id) {
-                            $updateResult = $this->dataController->updateData($table, ['GoogleID' => $google_id], ['email' => $email]);
-                            if (!$updateResult) {
-                                return [
-                                    'status' => 'error',
-                                    'message' => 'Cập nhật GoogleID thất bại'
-                                ];
-                            }
-                        }
-                        $insertResult = $this->modelSQL->insert('user_tokens', [
-                            'google_id' => $google_id,
-                            'refresh_token' => $access_token,
-                            'expires_at' => $expires_at
-                        ]);
-                        if (!$insertResult) {
-                            return [
-                                'status' => 'error',
-                                'message' => 'Lưu access token thất bại'
-                            ];
-                        }
-                        $token = $this->authController->LoginWithGoogle($google_id);
-                        if (isset($token['error']) || !$token['token']) {
-                            return [
-                                'status' => 'error',
-                                'message' => $token['error'] ?? 'Tạo token thất bại'
-                            ];
-                        }
-                        return [
-                            'status' => 'success',
-                            'token' => $token['token'],
-                            'message' => 'Đăng nhập thành công app',
-                            'role' => $existingUser['role'],
-                            'account_status' => $existingUser['Status']
-                        ];
-                    } else {
+
+                    // Cập nhật GoogleID nếu cần (đã xử lý phía trên)
+                    $insertResult = $this->modelSQL->insert('user_tokens', [
+                        'google_id' => $google_id ?? ($existingUser['GoogleID'] ?? null),
+                        'refresh_token' => $access_token,
+                        'expires_at' => $expires_at
+                    ]);
+                    if (!$insertResult) {
                         return [
                             'status' => 'error',
-                            'message' => 'Tài khoản không tồn tại hoặc chưa được admin tạo'
+                            'message' => 'Lưu access token thất bại'
                         ];
                     }
+                    $token = $this->authController->LoginWithGoogle($google_id ?? ($existingUser['GoogleID'] ?? null));
+                    if (isset($token['error']) || !$token['token']) {
+                        return [
+                            'status' => 'error',
+                            'message' => $token['error'] ?? 'Tạo token thất bại'
+                        ];
+                    }
+                    return [
+                        'status' => 'success',
+                        'token' => $token['token'],
+                        'message' => 'Đăng nhập thành công app',
+                        'role' => $existingUser['role'],
+                        'account_status' => $existingUser['Status'] ?? null
+                    ];
                 }
                 return [
                     'status' => 'error',

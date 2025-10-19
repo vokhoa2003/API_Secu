@@ -57,6 +57,20 @@ class AuthController{
         error_log("GetUserIdByGoogleId: No user found for GoogleID $google_id");
         return null;
     }
+
+    // Lấy user theo email (tương tự GetUserIdByGoogleId)
+    public function GetUserByEmail($email, $table = 'account') {
+        if (empty($email)) {
+            return null;
+        }
+        $result = $this->modelSQL->ViewData($table, ['email' => $email]);
+        if ($result && $row = $result->fetch_assoc()) {
+            error_log("GetUserByEmail found: " . print_r($row, true));
+            return $row;
+        }
+        error_log("GetUserByEmail: No user found for email $email");
+        return null;
+    }
     public function getBearerToken(){
         $headers = getallheaders();
         if (!isset($headers['Authorization'])) {
