@@ -51,7 +51,7 @@ class ApiController {
                 ];
             }
             // Luôn lấy GoogleID và role từ token đã xác thực
-            $params['GoogleID'] = $middlewareResult['GoogleID'];
+            $params['email'] = $middlewareResult['email'];
             $params['role'] = $middlewareResult['role'];
         }
         switch ($action) {
@@ -203,8 +203,8 @@ class ApiController {
                         }
                         if(isset($existingUser['role']) && $existingUser['role'] === 'admin'){
                             $addRelatedTable = $this -> dataController -> addData('admin', [
-                                'IdAccount' => $user['id'],
-                                'Name' => $user['FullName']
+                                'IdAccount' => $existingUser['id'],
+                                //'Name' => $existingUser['FullName']
                             ]);
                         }
                     }
