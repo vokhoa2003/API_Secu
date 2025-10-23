@@ -16,13 +16,51 @@ class ApiController {
         $this->modelSQL = new ModelSQL();
     }
 
-    private function checkCsrf($params) {
+    // Thay thế hàm checkCsrf hiện tại bằng phiên bản nhận thêm $action
+    private function checkCsrf($params, $action = null) {
         $method = $_SERVER['REQUEST_METHOD'];
         if (in_array($method, ['POST', 'PUT', 'DELETE'])) {
-            if (empty($params['csrf_token']) || !isset($_COOKIE['csrf_token']) || $_COOKIE['csrf_token'] !== $params['csrf_token']) {
-                http_response_code(403);
-                return false;
+            $tokenParam = $params['csrf_token'] ?? null;
+            $tokenCookie = $_COOKIE['csrf_token'] ?? null;
+
+            // Nếu action là app_login (desktop/mobile client) cho phép khi client gửi csrf_token trong body
+            if ($action === 'app_login' && $tokenParam) {
+                return true;
             }
+
+            // 1) Nếu cả cookie và param tồn tại và khớp -> ok
+            if ($tokenParam && $tokenCookie && hash_equals($tokenCookie, $tokenParam)) {
+                return true;
+            }
+
+            // 2) Kiểm tra header X-CSRF-Token (case-insensitive)
+            $headers = function_exists('getallheaders') ? getallheaders() : [];
+            $headerToken = null;
+            foreach (['X-CSRF-Token','x-csrf-token','X-Csrf-Token'] as $h) {
+                if (isset($headers[$h])) { $headerToken = $headers[$h]; break; }
+            }
+            if ($headerToken && $tokenParam && hash_equals($headerToken, $tokenParam)) {
+                return true;
+            }
+
+            // 3) Nếu client gửi Cookie header trực tiếp (ví dụ Java client), parse và so sánh
+            $cookieStr = $headers['Cookie'] ?? ($headers['cookie'] ?? null);
+            if ($cookieStr) {
+                $cookieParts = [];
+                foreach (explode(';', $cookieStr) as $part) {
+                    $kv = explode('=', trim($part), 2);
+                    if (count($kv) === 2) {
+                        $cookieParts[$kv[0]] = $kv[1];
+                    }
+                }
+                if (isset($cookieParts['csrf_token']) && $tokenParam && hash_equals($cookieParts['csrf_token'], $tokenParam)) {
+                    return true;
+                }
+            }
+
+            // Nếu chưa có match, trả về lỗi
+            http_response_code(403);
+            return false;
         }
         return true;
     }
@@ -31,8 +69,8 @@ class ApiController {
         error_log("Action: $action");
         error_log("Params: " . print_r($params, true));
 
-        // // Kiểm tra CSRF token cho các phương thức thay đổi dữ liệu
-        if (!$this->checkCsrf($params)) {
+        // Kiểm tra CSRF token (truyền action để special-case app_login)
+        if (!$this->checkCsrf($params, $action)) {
             return [
                 'status' => 'error',
                 'message' => 'Invalid CSRF token'
