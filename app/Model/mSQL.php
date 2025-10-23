@@ -16,39 +16,72 @@ class ModelSQL extends Connect {
     //     $stmt->close();
     //     return $result;
     // }
-    public function executeQuery($sql, $params = [], $types = "") {
+    // Helper: lấy danh sách cột thực tế của bảng (trả array các tên cột)
+    private function getTableColumns(string $table): array {
         $con = $this->openDB();
-        $stmt = $con->prepare($sql);
-        if (!empty($params)) {
-            if (empty($types)) {
-                $types = str_repeat("s", count($params));
+        $cols = [];
+        try {
+            $res = $con->query("SHOW COLUMNS FROM `$table`");
+            if ($res instanceof mysqli_result) {
+                while ($r = $res->fetch_assoc()) {
+                    $cols[] = $r['Field'];
+                }
+                $res->free();
             }
-
-            // Tạo mảng tham chiếu
-            $bindParams = [];
-            $bindParams[] = &$types;
-            foreach ($params as $key => $value) {
-                $bindParams[] = &$params[$key]; // tham chiếu
-            }
-
-            // Gọi bind_param bằng call_user_func_array
-            call_user_func_array([$stmt, 'bind_param'], $bindParams);
+        } catch (\Throwable $e) {
+            @file_put_contents(__DIR__.'/../../logs/mssql_errors.log', date('c')." SHOW COLUMNS error: ".$e->getMessage()."\n", FILE_APPEND);
         }
-
-        $stmt->execute();
-        //$result = $stmt->get_result() ?: $stmt->affected_rows;
-        if (stripos(trim($sql), 'select') === 0) {
-            // Nếu là SELECT thì phải dùng get_result()
-            $result = $stmt->get_result();
-        } else {
-            // Các truy vấn khác như INSERT/UPDATE/DELETE
-            $result = $stmt->affected_rows;
-        }
-
-        $stmt->close();
-        return $result;
+        return $cols;
     }
 
+    // Thực thi truy vấn chuẩn hoá, bắt exception và log (tránh in HTML fatal)
+    public function executeQuery($sql, $params = [], $types = "") {
+        $con = $this->openDB();
+        try {
+            $stmt = $con->prepare($sql);
+            if ($stmt === false) {
+                @file_put_contents(__DIR__.'/../../logs/mssql_errors.log', date('c')." Prepare failed: ".$con->error."\nSQL: ".$sql."\nParams: ".json_encode($params)."\n", FILE_APPEND);
+                return false;
+            }
+
+            if (!empty($params)) {
+                if (empty($types)) {
+                    $types = str_repeat("s", count($params));
+                }
+                // build bind params by reference
+                $bindParams = [];
+                $bindParams[] = & $types;
+                // numeric keys preserved order
+                $i = 0;
+                foreach ($params as $k => $v) {
+                    $bindParams[] = & $params[$k];
+                    $i++;
+                }
+                call_user_func_array([$stmt, 'bind_param'], $bindParams);
+            }
+
+            if (!$stmt->execute()) {
+                @file_put_contents(__DIR__.'/../../logs/mssql_errors.log', date('c')." Execute failed: ".$stmt->error."\nSQL: ".$sql."\nParams: ".json_encode($params)."\n", FILE_APPEND);
+                $stmt->close();
+                return false;
+            }
+
+            if (stripos(trim($sql), 'select') === 0) {
+                $result = $stmt->get_result();
+            } else {
+                $result = $stmt->affected_rows;
+            }
+
+            $stmt->close();
+            return $result;
+        } catch (\mysqli_sql_exception $me) {
+            @file_put_contents(__DIR__.'/../../logs/mssql_errors.log', date('c')." SQL EXCEPTION: ".$me->getMessage()."\nSQL: ".$sql."\nParams: ".json_encode($params)."\n", FILE_APPEND);
+            return false;
+        } catch (\Throwable $e) {
+            @file_put_contents(__DIR__.'/../../logs/mssql_errors.log', date('c')." ERROR: ".$e->getMessage()."\nSQL: ".$sql."\nParams: ".json_encode($params)."\n", FILE_APPEND);
+            return false;
+        }
+    }
 
     /**
      * Lấy dữ liệu từ bảng với điều kiện linh hoạt
@@ -94,34 +127,56 @@ class ModelSQL extends Connect {
     //     $types = str_repeat("s", count($data)); // Có thể cải tiến để hỗ trợ kiểu dữ liệu khác
     //     return $this->executeQuery($sql, array_values($data), $types) !== false;
     // }
+    // Insert: giữ nguyên tên keys, lọc theo cột thật của bảng để tránh Unknown column
     public function insert($table, $data, $onDuplicateKeyUpdate = true) {
         $con = $this->openDB();
-        
-        // Loại bỏ key trùng lặp, giữ giá trị cuối cùng
-        $filteredData = array_combine(
-            array_map('strtolower', array_keys($data)),
-            array_values($data)
-        );
-        $filteredData = array_combine(
-            array_map('ucfirst', array_keys($filteredData)),
-            array_values($filteredData)
-        );
-        
-        if (empty($filteredData)) {
+
+        if (empty($data) || empty($table)) return false;
+
+        // Lấy cột thật của bảng, lọc data
+        $allowedCols = $this->getTableColumns($table);
+        if (empty($allowedCols)) {
+            @file_put_contents(__DIR__.'/../../logs/mssql_errors.log', date('c')." insert: table not found or no columns for $table\n", FILE_APPEND);
             return false;
         }
 
-        $columns = array_keys($filteredData);
-        $placeholders = array_fill(0, count($filteredData), "?");
-        $sql = "INSERT INTO $table (" . implode(",", $columns) . ") VALUES (" . implode(",", $placeholders) . ")";
-        
+        $filtered = [];
+        foreach ($data as $k => $v) {
+            // chấp nhận key trùng hoặc khác case: dùng exact match hoặc case-insensitive
+            if (in_array($k, $allowedCols, true)) {
+                $filtered[$k] = $v;
+            } else {
+                // thử match case-insensitive
+                foreach ($allowedCols as $col) {
+                    if (strcasecmp($col, $k) === 0) { $filtered[$col] = $v; break; }
+                }
+            }
+        }
+
+        if (empty($filtered)) {
+            @file_put_contents(__DIR__.'/../../logs/mssql_errors.log', date('c')." insert: no valid columns after filtering for table $table. payload: ".json_encode($data)."\n", FILE_APPEND);
+            return false;
+        }
+
+        $columns = array_keys($filtered);
+        $placeholders = array_fill(0, count($filtered), "?");
+        $sql = "INSERT INTO `$table` (`" . implode("`,`", $columns) . "`) VALUES (" . implode(", ", $placeholders) . ")";
         if ($onDuplicateKeyUpdate) {
-            $updates = array_map(fn($key) => "$key=VALUES($key)", $columns);
+            $updates = array_map(fn($key) => "`$key`=VALUES(`$key`)", $columns);
             $sql .= " ON DUPLICATE KEY UPDATE " . implode(", ", $updates);
         }
-        
-        $types = str_repeat("s", count($filteredData));
-        return $this->executeQuery($sql, array_values($filteredData), $types) !== false;
+
+        // types
+        $types = "";
+        $values = array_values($filtered);
+        foreach ($values as $val) {
+            if (is_int($val)) $types .= "i";
+            elseif (is_float($val)) $types .= "d";
+            else $types .= "s";
+        }
+
+        $res = $this->executeQuery($sql, $values, $types);
+        return $res !== false;
     }
     /**
      * Cập nhật dữ liệu
@@ -198,7 +253,7 @@ class ModelSQL extends Connect {
 
     //     return $this->executeQuery($sql, $params, $types);
     // }
-    public function autoQuery($tables, $columns = ['*'], $join = [], $conditions = []) {
+    public function autoQuery($tables, $columns = ['*'], $join = [], $conditions = [], $groupBy = '') {
         // 1️⃣ Bắt đầu câu SQL cơ bản
         $sql = "SELECT " . implode(", ", $columns) . " FROM ";
 
@@ -236,10 +291,19 @@ class ModelSQL extends Connect {
             $sql .= implode(" AND ", $conds);
         }
 
-        // 5️⃣ Debug in ra câu SQL (tùy chọn)
+        // 5️⃣ Xử lý GROUP BY nếu có (hỗ trợ string hoặc array)
+        if (!empty($groupBy)) {
+            if (is_array($groupBy)) {
+                $sql .= " GROUP BY " . implode(", ", $groupBy);
+            } else {
+                $sql .= " GROUP BY " . $groupBy;
+            }
+        }
+
+        // 6️⃣ Debug in ra câu SQL (tùy chọn)
         // error_log("AUTOQUERY SQL: " . $sql);
 
-        // 6️⃣ Thực thi truy vấn
+        // 7️⃣ Thực thi truy vấn
         return $this->executeQuery($sql, $params, $types);
     }
 
@@ -288,6 +352,65 @@ class ModelSQL extends Connect {
 
             return ['status' => 'success', 'message' => 'Cập nhật thành công'];
         } catch (Exception $e) {
+            return ['status' => 'error', 'message' => $e->getMessage()];
+        }
+    }
+
+    // Thêm method multiInsert để chèn nhiều hàng (các operations) và trả về insert ids
+    public function multiInsert($operations) {
+        $con = $this->openDB();
+        $con->begin_transaction();
+        try {
+            $allResults = [];
+            foreach ($operations as $op) {
+                $table = $op['table'] ?? '';
+                $rows = $op['rows'] ?? [];
+                if (!$table || empty($rows)) {
+                    $allResults[] = ['status' => 'error', 'message' => 'Missing table or rows'];
+                    continue;
+                }
+                $opInsertIds = [];
+                foreach ($rows as $row) {
+                    $columns = array_keys($row);
+                    $placeholders = implode(", ", array_fill(0, count($columns), "?"));
+                    $colsSql = implode("`, `", $columns);
+                    $sql = "INSERT INTO `$table` (`$colsSql`) VALUES ($placeholders)";
+                    $stmt = $con->prepare($sql);
+                    if ($stmt === false) {
+                        throw new Exception("Prepare failed: " . $con->error);
+                    }
+
+                    // build types and params
+                    $types = "";
+                    $params = [];
+                    foreach ($columns as $c) {
+                        $val = $row[$c];
+                        $params[] = $val;
+                        if (is_int($val)) $types .= "i";
+                        elseif (is_float($val)) $types .= "d";
+                        else $types .= "s";
+                    }
+
+                    // bind params dynamically (by reference)
+                    $bindParams = [];
+                    $bindParams[] = & $types;
+                    for ($i = 0; $i < count($params); $i++) {
+                        $bindParams[] = & $params[$i];
+                    }
+                    call_user_func_array(array($stmt, 'bind_param'), $bindParams);
+
+                    if (!$stmt->execute()) {
+                        throw new Exception("Execute failed: " . $stmt->error);
+                    }
+                    $opInsertIds[] = $con->insert_id;
+                    $stmt->close();
+                }
+                $allResults[] = ['status' => 'success', 'insert_ids' => $opInsertIds];
+            }
+            $con->commit();
+            return ['status' => 'success', 'data' => $allResults];
+        } catch (Exception $e) {
+            $con->rollback();
             return ['status' => 'error', 'message' => $e->getMessage()];
         }
     }

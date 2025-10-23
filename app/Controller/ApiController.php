@@ -476,8 +476,9 @@ class ApiController {
                 $columns = $params['columns'] ?? ['*'];
                 $join = $params['join'] ?? [];
                 $conditions = $params['conditions'] ?? [];
+                $groupBy = $params['groupBy'] ?? [];
 
-                $result = $this->modelSQL->autoQuery($tables, $columns, $join, $conditions);
+                $result = $this->modelSQL->autoQuery($tables, $columns, $join, $conditions, $groupBy);
                 $data = [];
                 if ($result instanceof mysqli_result) {
                     while ($row = $result->fetch_assoc()) {
@@ -500,6 +501,14 @@ class ApiController {
                     'status' => $result['status'],
                     'message' => $result['message']
                 ];
+            case 'multiInsert':
+                $operations = $params['operations'] ?? [];
+                // debug log
+                file_put_contents(__DIR__.'/../../multi_insert_debug.log', date('c')." multiInsert payload: ".json_encode($operations)."\n", FILE_APPEND);
+                $res = $this->modelSQL->multiInsert($operations);
+                header('Content-Type: application/json');
+                echo json_encode($res);
+                return;
             default:
                 return [
                     'status' => 'error',
