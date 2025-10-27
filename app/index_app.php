@@ -1,4 +1,5 @@
 <?php
+
 header('Content-Type: application/json; charset=utf-8');
 
 error_log("Received request: " . $_SERVER['REQUEST_METHOD'] . " " . $_SERVER['REQUEST_URI']);
@@ -57,24 +58,36 @@ if (!is_array($result)) {
 foreach ($result as &$task) {
     if (!is_array($task)) continue;
 
-    // if (isset($task['status'])&&$task['status'] === 'success') {
-    //     $task['StatusAPI'] = $task['status'];
-    //     unset($task['status']);
-    // }
-    // Chuyển thời gian sang định dạng ISO 8601
+    // ✅ Xử lý CreateDate - đảm bảo format đầy đủ yyyy-MM-dd HH:mm:ss
     if (isset($task['CreateDate'])) {
-        // $task['createDate'] = date(DATE_ISO8601, strtotime($task['CreateDate']));
-        $task['createDate'] = $task['CreateDate'];
+        $createDate = $task['CreateDate'];
+        // Nếu chỉ có date (yyyy-MM-dd) thì thêm thời gian mặc định
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $createDate)) {
+            $createDate .= ' 00:00:00';
+        }
+        $task['createDate'] = $createDate;
         unset($task['CreateDate']);
     }
+    
+    // ✅ Xử lý UpdateDate
     if (isset($task['UpdateDate'])) {
-        //$task['updateDate'] = date(DATE_ISO8601, strtotime($task['UpdateDate']));
-        $task['updateDate'] = $task['UpdateDate'];
+        $updateDate = $task['UpdateDate'];
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $updateDate)) {
+            $updateDate .= ' 00:00:00';
+        }
+        $task['updateDate'] = $updateDate;
         unset($task['UpdateDate']);
     }
+    
+    // ✅ Xử lý BirthDate - chuyển null nếu là 0000-00-00 hoặc rỗng
     if (isset($task['BirthDate'])) {
-        //$task['birthDate'] = date(DATE_ISO8601, strtotime($task['BirthDate']));
-        $task['birthDate'] = $task['BirthDate'];
+        $birthDate = $task['BirthDate'];
+        if (empty($birthDate) || $birthDate === '0000-00-00' || $birthDate === '0000-00-00 00:00:00') {
+            $task['birthDate'] = null;
+        } else {
+            // Chỉ lấy phần date (bỏ time nếu có)
+            $task['birthDate'] = substr($birthDate, 0, 10);
+        }
         unset($task['BirthDate']);
     }
 
@@ -91,7 +104,6 @@ foreach ($result as &$task) {
         $task['identityNumber'] = $task['IdentityNumber'];
         unset($task['IdentityNumber']);
     }
-    
     if (isset($task['Phone'])) {
         $task['phone'] = $task['Phone'];
         unset($task['Phone']);
@@ -100,15 +112,10 @@ foreach ($result as &$task) {
         $task['address'] = $task['Address'];
         unset($task['Address']);
     }
-    if (isset($task['account_status'])) {
-        $task['accountStatus'] = $task['account_status'];
-        unset($task['account_status']);
-    }
     if (isset($task['Status'])) {
         $task['status'] = $task['Status'];
         unset($task['Status']);
     }
-
     if (isset($task['Question'])) {
         $task['question'] = $task['Question'];
         unset($task['Question']);
@@ -117,7 +124,6 @@ foreach ($result as &$task) {
         $task['answer'] = $task['Answer'];
         unset($task['Answer']);
     }
-    // Các field khác giữ nguyên như: id, email, phone, address
 }
 
 echo json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
