@@ -396,10 +396,19 @@ class ApiController {
 
             case 'AdminUpdate':
                 $table = $params['table'] ?? 'account';
-                $data = array_filter($params, fn($key) => !in_array($key, ['table', 'action', 'csrf_token', 'GoogleID']), ARRAY_FILTER_USE_KEY);
-                $conditions = ['email' => $params['email'] ?? null];
+                if ($table === 'classes'){
+                    $conditions = ['Id' => $params['id'] ?? null];
+                    $data = [
+                        'Name' => $params['name'] ?? null,
+                        'Description' => $params['description'] ?? null
 
-                if ($conditions['email'] && !empty($data)) {
+                    ];
+                }else{
+                    $data = array_filter($params, fn($key) => !in_array($key, ['table', 'action', 'csrf_token', 'GoogleID']), ARRAY_FILTER_USE_KEY);
+                    $conditions = ['email' => $params['email'] ?? null];
+                }   
+
+                if (!empty($conditions) && !empty($data)) {
                     if ($this->dataController->updateData($table, $data, $conditions)) {
                         return [
                             'status' => 'success',
@@ -420,8 +429,8 @@ class ApiController {
                 if($params['role'] === 'customer' && $params['table'] === 'account'){
                     $table = $params['table'] ?? 'account';
                     $data = array_filter($params, fn($key) => !in_array($key, ['table', 'action', 'csrf_token', 'GoogleID']), ARRAY_FILTER_USE_KEY);
-                    $conditions = ['GoogleID' => $params['GoogleID'] ?? null];
-
+                    
+                    //$conditions = ['GoogleID' => $params['GoogleID'] ?? null];
                     if ($conditions['GoogleID'] && !empty($data)) {
                         if ($this->dataController->updateData($table, $data, $conditions)) {
                             return [
