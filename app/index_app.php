@@ -68,9 +68,9 @@ foreach ($result as &$task) {
     if (isset($task['CreateDate'])) {
         $createDate = $task['CreateDate'];
         // NẾU RỖNG HOẶC 0000-00-00 → CHUYỂN THÀNH null
-    if (empty($createDate) || $createDate === '0000-00-00 00:00:00' || $createDate === '0000-00-00') {
-        $task['createDate'] = null;
-    } else {
+    // if (empty($createDate) || $createDate === '0000-00-00 00:00:00' || $createDate === '0000-00-00') {
+    //     $task['createDate'] = null;
+    // } else {
         // Nếu chỉ có date (yyyy-MM-dd) thì thêm thời gian mặc định
         if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $createDate)) {
             $createDate .= ' 00:00:00';
@@ -78,22 +78,22 @@ foreach ($result as &$task) {
         $task['createDate'] = $createDate;
         unset($task['CreateDate']);
     }
-}
+
     
     // ✅ Xử lý UpdateDate
     if (isset($task['UpdateDate'])) {
         $updateDate = $task['UpdateDate'];
         // NẾU RỖNG HOẶC 0000-00-00 → CHUYỂN THÀNH null
-    if (empty($updateDate) || $updateDate === '0000-00-00 00:00:00' || $updateDate === '0000-00-00') {
-        $task['updateDate'] = null;
-    } else {
+    // if (empty($updateDate) || $updateDate === '0000-00-00 00:00:00' || $updateDate === '0000-00-00') {
+    //     $task['updateDate'] = null;
+    // } else {
         if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $updateDate)) {
             $updateDate .= ' 00:00:00';
         }
         $task['updateDate'] = $updateDate;
         unset($task['UpdateDate']);
     }
-}
+
     
     // ✅ Xử lý BirthDate - chuyển null nếu là 0000-00-00 hoặc rỗng
     if (isset($task['BirthDate'])) {
