@@ -395,27 +395,50 @@ class ApiController {
                 ];
 
             case 'AdminUpdate':
-                $table = $params['table'] ?? 'account';
-                $data = array_filter($params, fn($key) => !in_array($key, ['table', 'action', 'csrf_token', 'GoogleID']), ARRAY_FILTER_USE_KEY);
-                $conditions = ['email' => $params['email'] ?? null];
+    $table = $params['table'] ?? 'account';
+    
+    // Lấy dữ liệu cần cập nhật (loại bỏ các key không phải cột)
+    $data = array_filter($params, fn($key) => !in_array($key, ['table', 'action', 'csrf_token', 'GoogleID']), ARRAY_FILTER_USE_KEY);
 
-                if ($conditions['email'] && !empty($data)) {
-                    if ($this->dataController->updateData($table, $data, $conditions)) {
-                        return [
-                            'status' => 'success',
-                            'message' => 'Cập nhật thành công'
-                        ];
-                    }
-                    return [
-                        'status' => 'error',
-                        'message' => 'Cập nhật thất bại'
-                    ];
-                }
-                return [
-                    'status' => 'error',
-                    'message' => 'Thiếu thông tin'
-                ];
+    // Xây dựng điều kiện tìm bản ghi
+    $conditions = [];
 
+    // 1. Ưu tiên dùng Id (cho classes, teacher, student)
+    if (!empty($params['Id'])) {
+        $conditions['Id'] = $params['Id'];
+    }
+    // 2. Nếu không có Id và là bảng account → dùng email
+    elseif ($table === 'account' && !empty($params['email'])) {
+        $conditions['email'] = $params['email'];
+    }
+    // 3. Trường hợp lỗi
+    else {
+        return [
+            'status' => 'error',
+            'message' => 'Thiếu Id (cho lớp/GV/HS) hoặc email (cho tài khoản)'
+        ];
+    }
+
+    // Kiểm tra có dữ liệu và điều kiện không
+    if (empty($data)) {
+        return ['status' => 'error', 'message' => 'Không có dữ liệu để cập nhật'];
+    }
+    if (empty($conditions)) {
+        return ['status' => 'error', 'message' => 'Thiếu điều kiện tìm'];
+    }
+
+    // Gọi update
+    if ($this->dataController->updateData($table, $data, $conditions)) {
+        return [
+            'status' => 'success',
+            'message' => 'Cập nhật thành công'
+        ];
+    }
+
+    return [
+        'status' => 'error',
+        'message' => 'Cập nhật thất bại'
+    ];
             case 'update':
                 if($params['role'] === 'customer' && $params['table'] === 'account'){
                     $table = $params['table'] ?? 'account';
