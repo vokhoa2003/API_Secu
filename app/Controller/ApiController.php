@@ -448,8 +448,11 @@ class ApiController {
 
             case 'delete':
                 $table = $params['table'] ?? 'account';
-                $conditions = array_filter($params, fn($key) => !in_array($key, ['table', 'action', 'csrf_token']), ARRAY_FILTER_USE_KEY);
-
+                if ($table === 'classes'){
+                    $conditions = ['Id' => $params['Id'] ?? null];
+                } else{
+                    $conditions = array_filter($params, fn($key) => !in_array($key, ['table', 'action', 'csrf_token']), ARRAY_FILTER_USE_KEY);
+                }
                 if (!empty($conditions)) {
                     if ($this->dataController->deleteData($table, $conditions)) {
                         return [
@@ -459,7 +462,8 @@ class ApiController {
                     }
                     return [
                         'status' => 'error',
-                        'message' => 'Xóa thất bại'
+                        'message' => 'Xóa thất bại',
+                        'conditions' => $conditions
                     ];
                 }
                 return [

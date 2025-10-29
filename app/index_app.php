@@ -1,5 +1,11 @@
 <?php
+ini_set('display_errors', 0);
+ini_set('log_errors', 1);
+ini_set('error_log', __DIR__ . '/logs/error.log');
+ini_set('display_startup_errors', 0);
+error_reporting(E_ALL & ~E_NOTICE & ~E_WARNING);
 
+ob_start();
 header('Content-Type: application/json; charset=utf-8');
 
 error_log("Received request: " . $_SERVER['REQUEST_METHOD'] . " " . $_SERVER['REQUEST_URI']);
