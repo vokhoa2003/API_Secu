@@ -544,12 +544,6 @@ class ApiController {
                 $join = $params['join'] ?? [];
                 if (isset($params['conditions']) && is_string($params['conditions'])) {
                     // Thử decode JSON nếu là chuỗi
-                    $decoded = json_decode($params['conditions'], true);
-                    if (json_last_error() === JSON_ERROR_NONE) {
-                        $params['conditions'] = $decoded;
-                    }
-                }else if (isset($params['conditions']) && is_array($params['conditions'])) {
-                    // Giữ nguyên nếu đã là mảng
                     $conditions = $params['conditions'];
                 }else if (isset($params['where']) && is_array($params['where'])) {
                     // Giữ nguyên nếu đã là mảng
