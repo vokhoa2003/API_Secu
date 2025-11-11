@@ -283,10 +283,24 @@ class ModelSQL extends Connect {
         if (!empty($conditions)) {
             $sql .= " WHERE ";
             $conds = [];
+            // foreach ($conditions as $field => $value) {
+            //     $conds[] = "$field = ?";
+            //     $params[] = $value;
+            //     $types .= is_int($value) ? 'i' : 's';
+            // }
             foreach ($conditions as $field => $value) {
-                $conds[] = "$field = ?";
-                $params[] = $value;
-                $types .= is_int($value) ? 'i' : 's';
+                if (is_array($value)) {
+                    $placeholders = implode(',', array_fill(0, count($value), '?'));
+                    $conds[] = "$field IN ($placeholders)";
+                    foreach ($value as $v) {
+                        $params[] = $v;
+                        $types .= is_int($v) ? 'i' : 's';
+                    }
+                } else {
+                    $conds[] = "$field = ?";
+                    $params[] = $value;
+                    $types .= is_int($value) ? 'i' : 's';
+                }
             }
             $sql .= implode(" AND ", $conds);
         }
