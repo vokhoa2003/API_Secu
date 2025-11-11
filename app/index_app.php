@@ -41,108 +41,116 @@ if (empty($params)) {
 }
 
 if (strpos($requestUri, '/API_Secu') === 0) {
-    if(!$action)
-    {
+    if (!$action) {
         http_response_code(400);
         $result = ['error' => 'Endpoint not found'];
-    }else{
-        $result= $apiController->handleRequest($action,$params);
+    } else {
+        $result = $apiController->handleRequest($action, $params);
     }
 } else {
     http_response_code(404);
     $result = ['error' => 'API endpoint must start with /API_Secu'];
 }
 
-
-// ✅ Chuẩn hóa kết quả thành List<Task> định dạng JSON
+// ✅ Chuẩn hóa kết quả thành List<Object> định dạng JSON
 if (!is_array($result)) {
     $result = [$result];
 }
 
+// ✅ PHÂN BIỆT MODEL: teacher vs account (Task)
+foreach ($result as &$item) {
+    if (!is_array($item)) continue;
 
-// Đảm bảo mỗi phần tử là task, xử lý key và format datetime
-foreach ($result as &$task) {
-    if (!is_array($task)) continue;
+    // Xác định loại model
+    $isTeacher = (isset($item['IdAccount']) || isset($item['ClassId']));
+    $isAccount = (isset($item['email']) || isset($item['FullName']));
 
-    // ✅ Xử lý CreateDate - đảm bảo format đầy đủ yyyy-MM-dd HH:mm:ss
-    if (isset($task['CreateDate'])) {
-        $createDate = $task['CreateDate'];
-        // NẾU RỖNG HOẶC 0000-00-00 → CHUYỂN THÀNH null
-    // if (empty($createDate) || $createDate === '0000-00-00 00:00:00' || $createDate === '0000-00-00') {
-    //     $task['createDate'] = null;
-    // } else {
-        // Nếu chỉ có date (yyyy-MM-dd) thì thêm thời gian mặc định
+    // CHUẨN HÓA CHO MODEL TEACHER
+    if ($isTeacher) {
+        if (isset($item['Id'])) {
+            $item['id'] = $item['Id'];
+            unset($item['Id']);
+        }
+        if (isset($item['IdAccount'])) {
+            $item['idAccount'] = $item['IdAccount'];
+            unset($item['IdAccount']);
+        }
+        if (isset($item['Name'])) {
+            $item['name'] = $item['Name'];
+            unset($item['Name']);
+        }
+        if (isset($item['ClassId'])) {
+            $item['classId'] = $item['ClassId'];
+            unset($item['ClassId']);
+        }
+    }
+
+    // CHUẨN HÓA CHO MODEL ACCOUNT / TASK
+    if ($isAccount) {
+        if (isset($item['FullName'])) {
+            $item['fullName'] = $item['FullName'];
+            unset($item['FullName']);
+        }
+        if (isset($item['GoogleID'])) {
+            $item['googleId'] = $item['GoogleID'];
+            unset($item['GoogleID']);
+        }
+        if (isset($item['IdentityNumber'])) {
+            $item['identityNumber'] = $item['IdentityNumber'];
+            unset($item['IdentityNumber']);
+        }
+        if (isset($item['Phone'])) {
+            $item['phone'] = $item['Phone'];
+            unset($item['Phone']);
+        }
+        if (isset($item['Address'])) {
+            $item['address'] = $item['Address'];
+            unset($item['Address']);
+        }
+        if (isset($item['Status'])) {
+            $item['status'] = $item['Status'];
+            unset($item['Status']);
+        }
+        if (isset($item['Question'])) {
+            $item['question'] = $item['Question'];
+            unset($item['Question']);
+        }
+        if (isset($item['Answer'])) {
+            $item['answer'] = $item['Answer'];
+            unset($item['Answer']);
+        }
+    }
+
+    // XỬ LÝ NGÀY GIỜ
+    if (isset($item['CreateDate'])) {
+        $createDate = $item['CreateDate'];
         if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $createDate)) {
             $createDate .= ' 00:00:00';
         }
-        $task['createDate'] = $createDate;
-        unset($task['CreateDate']);
+        $item['createDate'] = $createDate;
+        unset($item['CreateDate']);
     }
 
-    
-    // ✅ Xử lý UpdateDate
-    if (isset($task['UpdateDate'])) {
-        $updateDate = $task['UpdateDate'];
-        // NẾU RỖNG HOẶC 0000-00-00 → CHUYỂN THÀNH null
-    // if (empty($updateDate) || $updateDate === '0000-00-00 00:00:00' || $updateDate === '0000-00-00') {
-    //     $task['updateDate'] = null;
-    // } else {
+    if (isset($item['UpdateDate'])) {
+        $updateDate = $item['UpdateDate'];
         if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $updateDate)) {
             $updateDate .= ' 00:00:00';
         }
-        $task['updateDate'] = $updateDate;
-        unset($task['UpdateDate']);
+        $item['updateDate'] = $updateDate;
+        unset($item['UpdateDate']);
     }
 
-    
-    // ✅ Xử lý BirthDate - chuyển null nếu là 0000-00-00 hoặc rỗng
-    if (isset($task['BirthDate'])) {
-        $birthDate = $task['BirthDate'];
+    if (isset($item['BirthDate'])) {
+        $birthDate = $item['BirthDate'];
         if (empty($birthDate) || $birthDate === '0000-00-00' || $birthDate === '0000-00-00 00:00:00') {
-            $task['birthDate'] = null;
+            $item['birthDate'] = null;
         } else {
-            // Chỉ lấy phần date (bỏ time nếu có)
-            $task['birthDate'] = substr($birthDate, 0, 10);
+            $item['birthDate'] = substr($birthDate, 0, 10);
         }
-        unset($task['BirthDate']);
-    }
-
-    // Đổi key sang camelCase
-    if (isset($task['GoogleID'])) {
-        $task['googleId'] = $task['GoogleID'];
-        unset($task['GoogleID']);
-    }
-    if (isset($task['FullName'])) {
-        $task['fullName'] = $task['FullName'];
-        unset($task['FullName']);
-    }
-    if (isset($task['IdentityNumber'])) {
-        $task['identityNumber'] = $task['IdentityNumber'];
-        unset($task['IdentityNumber']);
-    }
-    if (isset($task['Phone'])) {
-        $task['phone'] = $task['Phone'];
-        unset($task['Phone']);
-    }
-    if (isset($task['Address'])) {
-        $task['address'] = $task['Address'];
-        unset($task['Address']);
-    }
-    if (isset($task['Status'])) {
-        $task['status'] = $task['Status'];
-        unset($task['Status']);
-    }
-    if (isset($task['Question'])) {
-        $task['question'] = $task['Question'];
-        unset($task['Question']);
-    }
-    if (isset($task['Answer'])) {
-        $task['answer'] = $task['Answer'];
-        unset($task['Answer']);
+        unset($item['BirthDate']);
     }
 }
 
 echo json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
 exit;
-
 ?>

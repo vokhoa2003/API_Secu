@@ -375,6 +375,7 @@ class ApiController {
                     if (!$user) {
                         if ($this->dataController->addData($table, $data)) {
                             return [
+                                'data' => $data,
                                 'status' => 'success',
                                 'message' => 'Thêm thành công'
                             ];
@@ -473,6 +474,8 @@ class ApiController {
                 $table = $params['table'] ?? 'account';
                 if ($table === 'classes' || $table === 'teacher' || $table === 'student'){
                     $conditions = ['Id' => $params['Id'] ?? null];
+                } else if( $table === 'account'){
+                    $conditions = ['id' => $params['Id'] ?? null];
                 } else{
                     $conditions = array_filter($params, fn($key) => !in_array($key, ['table', 'action', 'csrf_token', 'email', 'roles']), ARRAY_FILTER_USE_KEY);
                 }
