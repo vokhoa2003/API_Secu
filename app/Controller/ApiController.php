@@ -21,44 +21,46 @@ class ApiController {
         $method = $_SERVER['REQUEST_METHOD'];
         if (in_array($method, ['POST', 'PUT', 'DELETE'])) {
             $tokenParam = $params['csrf_token'] ?? null;
-            $tokenCookie = $_COOKIE['csrf_token'] ?? null;
 
-            // Nếu action là app_login (desktop/mobile client) cho phép khi client gửi csrf_token trong body
+            // lấy header token (case-insensitive)
+            $headers = function_exists('getallheaders') ? getallheaders() : [];
+            $headerToken = $headers['X-CSRF-Token'] ?? $headers['x-csrf-token'] ?? $headers['X-Csrf-Token'] ?? null;
+
+            // cookie token (của trình duyệt)
+            $cookieToken = $_COOKIE['csrf_token'] ?? null;
+
+            // server-side session token (nếu bạn lưu)
+            if (session_status() !== PHP_SESSION_ACTIVE) @session_start();
+            $sessionToken = $_SESSION['csrf_token'] ?? null;
+
+            // Special-case: app_login (mobile/desktop) cho phép tokenParam gửi trong body
             if ($action === 'app_login' && $tokenParam) {
                 return true;
             }
 
-            // 1) Nếu cả cookie và param tồn tại và khớp -> ok
-            if ($tokenParam && $tokenCookie && hash_equals($tokenCookie, $tokenParam)) {
-                return true;
+            // 1) Accept headerToken matching cookie (double-submit) OR session token
+            if ($headerToken) {
+                if ($cookieToken && hash_equals($cookieToken, $headerToken)) return true;
+                if ($sessionToken && hash_equals($sessionToken, $headerToken)) return true;
             }
 
-            // 2) Kiểm tra header X-CSRF-Token (case-insensitive)
-            $headers = function_exists('getallheaders') ? getallheaders() : [];
-            $headerToken = null;
-            foreach (['X-CSRF-Token','x-csrf-token','X-Csrf-Token'] as $h) {
-                if (isset($headers[$h])) { $headerToken = $headers[$h]; break; }
-            }
-            if ($headerToken && $tokenParam && hash_equals($headerToken, $tokenParam)) {
-                return true;
+            // 2) Fallback: tokenParam matching cookie or session (for clients sending in body)
+            if ($tokenParam) {
+                if ($cookieToken && hash_equals($cookieToken, $tokenParam)) return true;
+                if ($sessionToken && hash_equals($sessionToken, $tokenParam)) return true;
             }
 
-            // 3) Nếu client gửi Cookie header trực tiếp (ví dụ Java client), parse và so sánh
+            // 3) For some non-browser clients who send raw Cookie header in headers, parse and compare
             $cookieStr = $headers['Cookie'] ?? ($headers['cookie'] ?? null);
-            if ($cookieStr) {
+            if ($cookieStr && $tokenParam) {
                 $cookieParts = [];
                 foreach (explode(';', $cookieStr) as $part) {
                     $kv = explode('=', trim($part), 2);
-                    if (count($kv) === 2) {
-                        $cookieParts[$kv[0]] = $kv[1];
-                    }
+                    if (count($kv) === 2) $cookieParts[$kv[0]] = $kv[1];
                 }
-                if (isset($cookieParts['csrf_token']) && $tokenParam && hash_equals($cookieParts['csrf_token'], $tokenParam)) {
-                    return true;
-                }
+                if (isset($cookieParts['csrf_token']) && hash_equals($cookieParts['csrf_token'], $tokenParam)) return true;
             }
 
-            // Nếu chưa có match, trả về lỗi
             http_response_code(403);
             return false;
         }
@@ -78,7 +80,7 @@ class ApiController {
         }
 
         //Chỉ xác thực token với các action cần bảo vệ
-        $actionsRequireAuth = ['get', 'update', 'delete', 'logout', 'refresh_token'];
+        $actionsRequireAuth = ['get', 'update', 'delete', 'logout', 'refresh_token', 'autoGet', 'autoUpdate', 'add', 'AdminUpdate', 'muitiInsert'];
         if (in_array($action, $actionsRequireAuth)) {
             $middlewareResult = AuthMiddleware::verifyRequest($action);
             if (isset($middlewareResult['error'])) {
@@ -440,7 +442,7 @@ class ApiController {
                     'message' => 'Cập nhật thất bại'
                 ];
             case 'update':
-                if($params['role'] === 'customer' && $params['table'] === 'account'){
+                if($params['role'] === 'student' && $params['table'] === 'account'){
                     $table = $params['table'] ?? 'account';
                     $data = array_filter($params, fn($key) => !in_array($key, ['table', 'action', 'csrf_token', 'GoogleID']), ARRAY_FILTER_USE_KEY);
                     $conditions = ['GoogleID' => $params['GoogleID'] ?? null];
@@ -542,14 +544,11 @@ class ApiController {
                 $tables = $params['table'] ?? '';
                 $columns = $params['columns'] ?? ['*'];
                 $join = $params['join'] ?? [];
-                if (isset($params['conditions']) && is_string($params['conditions'])) {
-                    // Thử decode JSON nếu là chuỗi
-                    $conditions = $params['conditions'];
-                }else if (isset($params['where']) && is_array($params['where'])) {
+                if (isset($params['where']) && is_array($params['where'])) {
                     // Giữ nguyên nếu đã là mảng
                     $conditions = $params['where'];
-                } else {
-                    $params['conditions'] = [];
+                }else{
+                    $conditions = $params['conditions'] ?? [];
                 }
                 //$conditions = $params['conditions'] ?? [];
                 $groupBy = $params['groupBy'] ?? [];
@@ -580,7 +579,8 @@ class ApiController {
             case 'multiInsert':
                 $operations = $params['operations'] ?? [];
                 // debug log
-                file_put_contents(__DIR__.'/../../multi_insert_debug.log', date('c')." multiInsert payload: ".json_encode($operations)."\n", FILE_APPEND);
+                file_put_contents(__DIR__.'/../../multi_insert_debug.log', date('c')." multiInsert payload: "
+                .json_encode($operations)."\n", FILE_APPEND);
                 $res = $this->modelSQL->multiInsert($operations);
                 header('Content-Type: application/json');
                 echo json_encode($res);
