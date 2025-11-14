@@ -543,14 +543,11 @@ class ApiController {
                 $tables = $params['table'] ?? '';
                 $columns = $params['columns'] ?? ['*'];
                 $join = $params['join'] ?? [];
-                if (isset($params['conditions']) && is_string($params['conditions'])) {
-                    // Thử decode JSON nếu là chuỗi
-                    $conditions = $params['conditions'];
-                }else if (isset($params['where']) && is_array($params['where'])) {
+                if (isset($params['where']) && is_array($params['where'])) {
                     // Giữ nguyên nếu đã là mảng
                     $conditions = $params['where'];
-                } else {
-                    $params['conditions'] = [];
+                }else{
+                    $conditions = $params['conditions'] ?? [];
                 }
                 //$conditions = $params['conditions'] ?? [];
                 $groupBy = $params['groupBy'] ?? [];
@@ -586,6 +583,13 @@ class ApiController {
                 header('Content-Type: application/json');
                 echo json_encode($res);
                 return;
+    //         case 'ping':
+    // return [
+    //     'status' => 'success',
+    //     'message' => 'Pong! API is alive.',
+    //     'timestamp' => date('c'),
+    //     'server' => $_SERVER['SERVER_NAME']
+    // ];
             default:
                 return [
                     'status' => 'error',
