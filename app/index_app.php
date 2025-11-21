@@ -58,6 +58,7 @@ if (!is_array($result)) {
 }
 
 // ✅ PHÂN BIỆT MODEL: teacher vs account (Task)
+//CHUẨN HÓA Chuyển PascalCase (DB) → camelCase (Java)
 foreach ($result as &$item) {
     if (!is_array($item)) continue;
 
@@ -121,7 +122,7 @@ foreach ($result as &$item) {
         }
     }
 
-    // XỬ LÝ NGÀY GIỜ
+    // XỬ LÝ NGÀY GIỜ -> cũng chuyển sang camelCase -> Tránh lỗi parsing date ở Java
     if (isset($item['CreateDate'])) {
         $createDate = $item['CreateDate'];
         if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $createDate)) {
@@ -150,6 +151,7 @@ foreach ($result as &$item) {
         unset($item['BirthDate']);
     }
 }
+//kết thúc chuẩn hóa
 
 echo json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
 exit;

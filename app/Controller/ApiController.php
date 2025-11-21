@@ -50,6 +50,12 @@ class ApiController {
                 if ($sessionToken && hash_equals($sessionToken, $tokenParam)) return true;
             }
 
+            // ✅ THÊM LOG ĐỂ BIẾT TẠI SAO FAIL
+    error_log("CSRF CHECK FAILED!");
+    error_log("headerToken: " . ($headerToken ?? 'NULL'));
+    error_log("cookieToken: " . ($cookieToken ?? 'NULL'));
+    error_log("tokenParam: " . ($tokenParam ?? 'NULL'));
+
             // 3) For some non-browser clients who send raw Cookie header in headers, parse and compare
             $cookieStr = $headers['Cookie'] ?? ($headers['cookie'] ?? null);
             if ($cookieStr && $tokenParam) {
@@ -80,7 +86,7 @@ class ApiController {
         }
 
         //Chỉ xác thực token với các action cần bảo vệ
-        $actionsRequireAuth = ['get', 'update', 'delete', 'logout', 'refresh_token', 'autoGet', 'autoUpdate', 'add', 'AdminUpdate', 'muitiInsert'];
+        $actionsRequireAuth = ['get', 'update', 'delete', 'logout', 'refresh_token', 'autoGet', 'autoUpdate', 'AdminUpdate', 'muitiInsert'];
         if (in_array($action, $actionsRequireAuth)) {
             $middlewareResult = AuthMiddleware::verifyRequest($action);
             if (isset($middlewareResult['error'])) {
@@ -315,6 +321,11 @@ class ApiController {
                             $conditions = [];
                         }elseif (empty($params['scope'])) {
                             $conditions = array_filter($params, fn($key) => !in_array($key, ['table','action','csrf_token','role','GoogleID']), ARRAY_FILTER_USE_KEY);
+                            // DEBUG - trả về luôn để xem
+                            // return [
+                            //     'debug_params' => $params,
+                            //     'debug_conditions' => $conditions
+                            // ];
                         }
                         else {
                             http_response_code(400);
@@ -473,31 +484,40 @@ class ApiController {
                 }
 
             case 'delete':
-                $table = $params['table'] ?? 'account';
-                if ($table === 'classes' || $table === 'teacher' || $table === 'student'){
-                    $conditions = ['Id' => $params['Id'] ?? null];
-                } else if($table === 'account'){
-                    $conditions = ['id' => $params['Id'] ?? null];
-                } else{
-                    $conditions = array_filter($params, fn($key) => !in_array($key, ['table', 'action', 'csrf_token', 'email', 'roles']), ARRAY_FILTER_USE_KEY);
-                }
-                if (!empty($conditions)) {
-                    if ($this->dataController->deleteData($table, $conditions)) {
-                        return [
-                            'status' => 'success',
-                            'message' => 'Xóa thành công'
-                        ];
-                    }
-                    return [
-                        'status' => 'error',
-                        'message' => 'Xóa thất bại',
-                        'conditions' => $conditions
-                    ];
-                }
-                return [
-                    'status' => 'error',
-                    'message' => 'Thiếu điều kiện'
-                ];
+    $table = $params['table'] ?? 'account';
+    if ($table === 'classes' || $table === 'teacher' || $table === 'student'){
+        $conditions = ['Id' => $params['Id'] ?? null];
+    } else if($table === 'account'){
+        // Check cả 'id' và 'Id'
+        $id = $params['id'] ?? $params['Id'] ?? null;
+        if ($id) {
+            $conditions = ['id' => $id];
+        } elseif (!empty($params['email'])) {
+            $conditions = ['email' => $params['email']];
+        } else {
+            $conditions = [];
+        }
+    } else {
+        $conditions = array_filter($params, fn($key) => !in_array($key, ['table', 'action', 'csrf_token', 'email', 'roles']), ARRAY_FILTER_USE_KEY);
+    }
+    
+    if (!empty($conditions) && !in_array(null, $conditions, true)) {
+        if ($this->dataController->deleteData($table, $conditions)) {
+            return [
+                'status' => 'success',
+                'message' => 'Xóa thành công'
+            ];
+        }
+        return [
+            'status' => 'error',
+            'message' => 'Xóa thất bại',
+            'conditions' => $conditions
+        ];
+    }
+    return [
+        'status' => 'error',
+        'message' => 'Thiếu điều kiện'
+    ];
 
             case 'refresh_token':
                 $table = $params['table'] ?? 'user_tokens';
