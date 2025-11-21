@@ -3,7 +3,7 @@
 require __DIR__ . "/../../JwtHandler.php";
 class AuthMiddleware{
     public static function verifyRequest($action){
-        $protectedAction = ['update', 'delete', 'logout', 'add', 'AdminUpdate', 'get'];
+        $protectedAction = ['update', 'delete', 'logout', 'add', 'AdminUpdate', 'get', 'autoGet','autoUpdate', 'AdminUpdate', 'muitiInsert'];
         if(in_array($action, $protectedAction)){
             $headers = getallheaders();
             if(!isset($headers["Authorization"])){
@@ -31,6 +31,7 @@ class AuthMiddleware{
             if($result === null){
                 http_response_code(401);
                 echo json_encode(array("error" => "Invalid or expired token"));
+                exit;
             }
 
             if (($action === 'delete' || $action === 'AdminUpdate' || $action === 'add') && $result['data']['role'] !== 'admin') {
