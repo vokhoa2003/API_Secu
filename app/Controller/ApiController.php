@@ -454,7 +454,7 @@ class ApiController {
                     'message' => 'Cập nhật thất bại'
                 ];
             case 'update':
-                if($params['role'] === 'student' && $params['table'] === 'account'){
+                if(($params['role'] === 'student' || $params['role'] === 'teacher') && $params['table'] === 'account'){
                     $table = $params['table'] ?? 'account';
                     $data = array_filter($params, fn($key) => !in_array($key, ['table', 'action', 'csrf_token', 'GoogleID']), ARRAY_FILTER_USE_KEY);
                     $conditions = ['GoogleID' => $params['GoogleID'] ?? null];
@@ -561,42 +561,57 @@ class ApiController {
                 ];
 
             case 'autoGet':
-                $method = $params['method'] ?? '';
-                $tables = $params['table'] ?? '';
-                $columns = $params['columns'] ?? ['*'];
-                $join = $params['join'] ?? [];
-                if (isset($params['where']) && is_array($params['where'])) {
-                    // Giữ nguyên nếu đã là mảng
-                    $conditions = $params['where'];
-                }else{
-                    $conditions = $params['conditions'] ?? [];
-                }
-                //$conditions = $params['conditions'] ?? [];
-                $groupBy = $params['groupBy'] ?? [];
+    $table   = $params['table'] ?? '';
+    $columns = $params['columns'] ?? ['*'];
+    $join    = $params['join'] ?? [];
 
-                $result = $this->modelSQL->autoQuery($tables, $columns, $join, $conditions, $groupBy);
-                $data = [];
-                if ($result instanceof mysqli_result) {
-                    while ($row = $result->fetch_assoc()) {
-                        $data[] = $row;
-                    }
-                } else {
-                    $data = $result;
-                }
-                return [
-                    'status' => 'success',
-                    'data' => $data
-                ];
-            case 'autoUpdate':
-                $table = $params['table'] ?? '';
-                $data = $params['data'] ?? [];
-                $method = $params['method'] ?? 'UPSERT';
+    // Xử lý where + whereIn
+    $where = [];
+    if (!empty($params['where']) && is_array($params['where']) && !isset($params['where'][0])) {
+        $where = $params['where'];
+    }
+    if (!empty($params['whereIn'])) {
+        foreach ($params['whereIn'] as $field => $values) {
+            if (is_array($values) && !empty($values)) {
+                $where[$field] = $values; // autoQuery sẽ tự hiểu là IN
+            }
+        }
+    }
 
-                $result = $this->modelSQL->autoUpdate($table, $data, $method);
-                return [
-                    'status' => $result['status'],
-                    'message' => $result['message']
-                ];
+    // Xử lý orderBy
+    $orderBy = '';
+    if (!empty($params['orderBy']) && is_array($params['orderBy'])) {
+        $parts = [];
+        foreach ($params['orderBy'] as $col => $dir) {
+            $dir = strtoupper($dir) === 'DESC' ? 'DESC' : 'ASC';
+            $parts[] = "`$col` $dir";
+        }
+        $orderBy = implode(', ', $parts);
+    }
+
+    // ĐÚNG THỨ TỰ THAM SỐ – ĐÂY LÀ CHÌA KHÓA!!!
+    $result = $this->modelSQL->autoQuery(
+        $table,
+        $columns,
+        $join,
+        $where,
+        $params['groupBy'] ?? '',   // groupBy
+        $orderBy                    // ← THÊM DÒNG NÀY!!!
+    );
+
+    $data = [];
+    if ($result instanceof mysqli_result) {
+        while ($row = $result->fetch_assoc()) {
+            $data[] = $row;
+        }
+        $result->free();
+    }
+
+    return [
+        'status' => 'success',
+        'data'   => $data,
+        'count'  => count($data)
+    ];
             case 'multiInsert':
                 $operations = $params['operations'] ?? [];
                 // debug log

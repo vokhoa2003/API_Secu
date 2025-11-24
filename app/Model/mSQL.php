@@ -253,7 +253,7 @@ class ModelSQL extends Connect {
 
     //     return $this->executeQuery($sql, $params, $types);
     // }
-    public function autoQuery($tables, $columns = ['*'], $join = [], $conditions = [], $groupBy = '') {
+    public function autoQuery($tables, $columns = ['*'], $join = [], $conditions = [], $groupBy = '', $orderBy = '') {
         // 1️⃣ Bắt đầu câu SQL cơ bản
         $sql = "SELECT " . implode(", ", $columns) . " FROM ";
 
@@ -313,6 +313,9 @@ class ModelSQL extends Connect {
                 $sql .= " GROUP BY " . $groupBy;
             }
         }
+        if (!empty($orderBy)) {
+            $sql .= " ORDER BY " . $orderBy;
+        }
 
         // 6️⃣ Debug in ra câu SQL (tùy chọn)
         // error_log("AUTOQUERY SQL: " . $sql);
@@ -325,7 +328,6 @@ class ModelSQL extends Connect {
         if (empty($table) || empty($data)) {
             return ['status' => 'error', 'message' => 'Thiếu dữ liệu table hoặc data'];
         }
-
         try {
             foreach ($data as $row) {
                 $columns = [];
