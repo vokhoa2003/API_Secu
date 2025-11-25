@@ -565,15 +565,24 @@ class ApiController {
     $columns = $params['columns'] ?? ['*'];
     $join    = $params['join'] ?? [];
 
-    // Xử lý where + whereIn
+    // ✅ Xử lý cả where VÀ conditions
     $where = [];
+    
+    // Đọc từ 'where' trước
     if (!empty($params['where']) && is_array($params['where']) && !isset($params['where'][0])) {
         $where = $params['where'];
     }
+    
+    // ✅ THÊM: Đọc từ 'conditions' (nếu có)
+    if (!empty($params['conditions']) && is_array($params['conditions']) && !isset($params['conditions'][0])) {
+        $where = array_merge($where, $params['conditions']);
+    }
+    
+    // Xử lý whereIn
     if (!empty($params['whereIn'])) {
         foreach ($params['whereIn'] as $field => $values) {
             if (is_array($values) && !empty($values)) {
-                $where[$field] = $values; // autoQuery sẽ tự hiểu là IN
+                $where[$field] = $values;
             }
         }
     }
@@ -589,14 +598,13 @@ class ApiController {
         $orderBy = implode(', ', $parts);
     }
 
-    // ĐÚNG THỨ TỰ THAM SỐ – ĐÂY LÀ CHÌA KHÓA!!!
     $result = $this->modelSQL->autoQuery(
         $table,
         $columns,
         $join,
         $where,
-        $params['groupBy'] ?? '',   // groupBy
-        $orderBy                    // ← THÊM DÒNG NÀY!!!
+        $params['groupBy'] ?? '',
+        $orderBy
     );
 
     $data = [];
