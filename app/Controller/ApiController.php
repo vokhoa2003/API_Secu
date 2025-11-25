@@ -620,6 +620,16 @@ class ApiController {
         'data'   => $data,
         'count'  => count($data)
     ];
+            case 'autoUpdate':
+                $table = $params['table'] ?? '';
+                $data = $params['data'] ?? [];
+                $method = $params['method'] ?? 'UPSERT';
+
+                $result = $this->modelSQL->autoUpdate($table, $data, $method);
+                return [
+                    'status' => $result['status'],
+                    'message' => $result['message']
+                ];
             case 'multiInsert':
                 $operations = $params['operations'] ?? [];
                 // debug log
