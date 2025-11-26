@@ -72,28 +72,29 @@ class ApiController {
         error_log("Params: " . print_r($params, true));
 
         // Kiểm tra CSRF token (truyền action để special-case app_login)
-        if (!$this->checkCsrf($params, $action)) {
-            return [
-                'status' => 'error',
-                'message' => 'Invalid CSRF token'
-            ];
-        }
+        // if (!$this->checkCsrf($params, $action)) {
+        //     return [
+        //         'status' => 'error',
+        //         'message' => 'Invalid CSRF token'
+        //     ];
+        // }
 
-        //Chỉ xác thực token với các action cần bảo vệ
-        $actionsRequireAuth = ['get', 'update', 'delete', 'logout', 'refresh_token', 'autoGet', 'autoUpdate', 'add', 'AdminUpdate', 'muitiInsert'];
-        if (in_array($action, $actionsRequireAuth)) {
-            $middlewareResult = AuthMiddleware::verifyRequest($action);
-            if (isset($middlewareResult['error'])) {
-                http_response_code(401);
-                return [
-                    'status' => 'error',
-                    'message' => $middlewareResult['error']
-                ];
-            }
-            // Luôn lấy GoogleID và role từ token đã xác thực
-            $params['email'] = $middlewareResult['email'];
-            $params['role'] = $middlewareResult['role'];
-        }
+        // //Chỉ xác thực token với các action cần bảo vệ
+        // $actionsRequireAuth = ['get', 'update', 'delete', 'logout', 'refresh_token', 'autoGet', 'autoUpdate', 'AdminUpdate', 'muitiInsert'];
+        // if (in_array($action, $actionsRequireAuth)) {
+        //     $middlewareResult = AuthMiddleware::verifyRequest($action);
+        //     if (isset($middlewareResult['error'])) {
+        //         http_response_code(401);
+        //         return [
+        //             'status' => 'error',
+        //             'message' => $middlewareResult['error']
+        //         ];
+        //     }
+        //     // Luôn lấy GoogleID và role từ token đã xác thực
+            
+        //     $params['email'] = $middlewareResult['email'];
+        //     $params['role'] = $middlewareResult['role'];
+        // }
         switch ($action) {
             case 'login':
                 $table = $params['table'] ?? 'account';
@@ -368,7 +369,7 @@ class ApiController {
                         if($this->dataController->getData($table, ['email' => $data['email']])){
                             return [
                                 'status' => 'error',
-                                'message' => 'Người dùng đã tồn tại'
+                                'message' => 'Người dùng đã tồn tại 01'
                             ];
                         }
                     }
@@ -442,7 +443,7 @@ class ApiController {
                     'message' => 'Cập nhật thất bại'
                 ];
             case 'update':
-                if($params['role'] === 'student' && $params['table'] === 'account'){
+                if(($params['role'] === 'student' || $params['role'] === 'teacher') && $params['table'] === 'account'){
                     $table = $params['table'] ?? 'account';
                     $data = array_filter($params, fn($key) => !in_array($key, ['table', 'action', 'csrf_token', 'GoogleID']), ARRAY_FILTER_USE_KEY);
                     $conditions = ['GoogleID' => $params['GoogleID'] ?? null];
