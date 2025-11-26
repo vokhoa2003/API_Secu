@@ -23,3 +23,6 @@
 2025-11-14T07:44:29+01:00 multiInsert payload: [{"rows":[{"QuestionId":150,"ExamId":12}],"table":"exam_questions"}]
 2025-11-14T07:44:29+01:00 multiInsert payload: [{"rows":[{"Answer":"a","IsCorrect":1,"QuestionId":150},{"Answer":"b","IsCorrect":0,"QuestionId":150},{"Answer":"c","IsCorrect":0,"QuestionId":150},{"Answer":"df","IsCorrect":0,"QuestionId":150}],"table":"answers"}]
 2025-11-15T11:37:59+01:00 multiInsert payload: []
+2025-11-25T14:11:21+01:00 multiInsert payload: [{"data":{"ClassId":3,"TeacherId":48,"EnrollDate":"2025-11-25 20:11:21"},"table":"teacher_class"}]
+2025-11-25T14:15:18+01:00 multiInsert payload: [{"rows":[{"ClassId":3,"TeacherId":48,"EnrollDate":"2025-11-25T20:15:18.886580100"}],"table":"teacher_class"}]
+2025-11-25T14:16:47+01:00 multiInsert payload: [{"rows":[{"ClassId":3,"EnrollDate":"2025-11-25T20:16:47.395374200","StudentId":46}],"table":"student_class"}]

@@ -318,7 +318,9 @@ class ModelSQL extends Connect {
         }
 
         // 6️⃣ Debug in ra câu SQL (tùy chọn)
-        // error_log("AUTOQUERY SQL: " . $sql);
+//         error_log("AUTOQUERY SQL: " . $sql);
+// error_log("PARAMS: " . print_r($params, true));
+// error_log("TYPES: " . $types);
 
         // 7️⃣ Thực thi truy vấn
         return $this->executeQuery($sql, $params, $types);
