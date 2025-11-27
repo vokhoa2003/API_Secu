@@ -50,12 +50,6 @@ class ApiController {
                 if ($sessionToken && hash_equals($sessionToken, $tokenParam)) return true;
             }
 
-            // ✅ THÊM LOG ĐỂ BIẾT TẠI SAO FAIL
-    error_log("CSRF CHECK FAILED!");
-    error_log("headerToken: " . ($headerToken ?? 'NULL'));
-    error_log("cookieToken: " . ($cookieToken ?? 'NULL'));
-    error_log("tokenParam: " . ($tokenParam ?? 'NULL'));
-
             // 3) For some non-browser clients who send raw Cookie header in headers, parse and compare
             $cookieStr = $headers['Cookie'] ?? ($headers['cookie'] ?? null);
             if ($cookieStr && $tokenParam) {
@@ -78,31 +72,13 @@ class ApiController {
         error_log("Params: " . print_r($params, true));
 
         // Kiểm tra CSRF token (truyền action để special-case app_login)
-        // if (!$this->checkCsrf($params, $action)) {
-        //     return [
-        //         'status' => 'error',
-        //         'message' => 'Invalid CSRF token'
-        //     ];
-        // }
+        if (!$this->checkCsrf($params, $action)) {
+            return [
+                'status' => 'error',
+                'message' => 'Invalid CSRF token'
+            ];
+        }
 
-<<<<<<< HEAD
-        // //Chỉ xác thực token với các action cần bảo vệ
-        // $actionsRequireAuth = ['get', 'update', 'delete', 'logout', 'refresh_token', 'autoGet', 'autoUpdate', 'AdminUpdate', 'muitiInsert'];
-        // if (in_array($action, $actionsRequireAuth)) {
-        //     $middlewareResult = AuthMiddleware::verifyRequest($action);
-        //     if (isset($middlewareResult['error'])) {
-        //         http_response_code(401);
-        //         return [
-        //             'status' => 'error',
-        //             'message' => $middlewareResult['error']
-        //         ];
-        //     }
-        //     // Luôn lấy GoogleID và role từ token đã xác thực
-            
-        //     $params['email'] = $middlewareResult['email'];
-        //     $params['role'] = $middlewareResult['role'];
-        // }
-=======
         //Chỉ xác thực token với các action cần bảo vệ
         $actionsRequireAuth = ['get', 'update', 'delete', 'logout', 'refresh_token', 'autoGet', 'autoUpdate', 'AdminUpdate', 'muitiInsert'];
         if (in_array($action, $actionsRequireAuth)) {
@@ -118,7 +94,6 @@ class ApiController {
             $params['email'] = $middlewareResult['email'];
             $params['role'] = $middlewareResult['role'];
         }
->>>>>>> 87f51890fc52cdc26d3cc20e87e67fa962410ada
         switch ($action) {
             case 'login':
                 $table = $params['table'] ?? 'account';
@@ -340,11 +315,6 @@ class ApiController {
                             $conditions = [];
                         }elseif (empty($params['scope'])) {
                             $conditions = array_filter($params, fn($key) => !in_array($key, ['table','action','csrf_token','role','GoogleID']), ARRAY_FILTER_USE_KEY);
-                            // DEBUG - trả về luôn để xem
-                            // return [
-                            //     'debug_params' => $params,
-                            //     'debug_conditions' => $conditions
-                            // ];
                         }
                         else {
                             http_response_code(400);
@@ -398,7 +368,7 @@ class ApiController {
                         if($this->dataController->getData($table, ['email' => $data['email']])){
                             return [
                                 'status' => 'error',
-                                'message' => 'Người dùng đã tồn tại 01'
+                                'message' => 'Người dùng đã tồn tại'
                             ];
                         }
                     }
@@ -407,7 +377,6 @@ class ApiController {
                     if (!$user) {
                         if ($this->dataController->addData($table, $data)) {
                             return [
-                                'data' => $data,
                                 'status' => 'success',
                                 'message' => 'Thêm thành công'
                             ];
@@ -428,48 +397,52 @@ class ApiController {
                 ];
 
             case 'AdminUpdate':
-    $table = $params['table'] ?? 'account';
-    
-    // Lấy dữ liệu cần cập nhật
-    $data = array_filter($params, fn($key) => !in_array($key, ['table', 'action', 'csrf_token', 'GoogleID', 'Id', 'id', 'ID']), ARRAY_FILTER_USE_KEY);
+                $table = $params['table'] ?? 'account';
+                
+                // Lấy dữ liệu cần cập nhật (loại bỏ các key không phải cột)
+                $data = array_filter($params, fn($key) => !in_array($key, ['table', 'action', 'csrf_token', 'GoogleID']), ARRAY_FILTER_USE_KEY);
 
-    // Xây dựng điều kiện
-    $conditions = [];
+                // Xây dựng điều kiện tìm bản ghi
+                $conditions = [];
 
-    // ✅ Kiểm tra cả "Id", "id", "ID"
-    $id = $params['Id'] ?? $params['id'] ?? $params['ID'] ?? null;
-    
-    if (!empty($id)) {
-        $conditions['Id'] = $id;
-    }
-    elseif ($table === 'account' && !empty($params['email'])) {
-        $conditions['email'] = $params['email'];
-    }
-    else {
-        return [
-            'status' => 'error',
-            'message' => 'Thiếu Id (cho lớp/GV/HS) hoặc email (cho tài khoản)'
-        ];
-    }
+                // 1. Ưu tiên dùng Id (cho classes, teacher, student)
+                if (!empty($params['Id'])) {
+                    $conditions['Id'] = $params['Id'];
+                }
+                // 2. Nếu không có Id và là bảng account → dùng email
+                elseif ($table === 'account' && !empty($params['email'])) {
+                    $conditions['email'] = $params['email'];
+                }
+                // 3. Trường hợp lỗi
+                else {
+                    return [
+                        'status' => 'error',
+                        'message' => 'Thiếu Id (cho lớp/GV/HS) hoặc email (cho tài khoản)'
+                    ];
+                }
 
-    if (empty($data)) {
-        return ['status' => 'error', 'message' => 'Không có dữ liệu để cập nhật'];
-    }
+                // Kiểm tra có dữ liệu và điều kiện không
+                if (empty($data)) {
+                    return ['status' => 'error', 'message' => 'Không có dữ liệu để cập nhật'];
+                }
+                if (empty($conditions)) {
+                    return ['status' => 'error', 'message' => 'Thiếu điều kiện tìm'];
+                }
 
-    // Gọi update
-    if ($this->dataController->updateData($table, $data, $conditions)) {
-        return [
-            'status' => 'success',
-            'message' => 'Cập nhật thành công'
-        ];
-    }
+                // Gọi update
+                if ($this->dataController->updateData($table, $data, $conditions)) {
+                    return [
+                        'status' => 'success',
+                        'message' => 'Cập nhật thành công'
+                    ];
+                }
 
-    return [
-        'status' => 'error',
-        'message' => 'Cập nhật thất bại'
-    ];
+                return [
+                    'status' => 'error',
+                    'message' => 'Cập nhật thất bại'
+                ];
             case 'update':
-                if(($params['role'] === 'student' || $params['role'] === 'teacher') && $params['table'] === 'account'){
+                if($params['role'] === 'student' && $params['table'] === 'account'){
                     $table = $params['table'] ?? 'account';
                     $data = array_filter($params, fn($key) => !in_array($key, ['table', 'action', 'csrf_token', 'GoogleID']), ARRAY_FILTER_USE_KEY);
                     $conditions = ['GoogleID' => $params['GoogleID'] ?? null];
@@ -499,40 +472,31 @@ class ApiController {
                 }
 
             case 'delete':
-    $table = $params['table'] ?? 'account';
-    if ($table === 'classes' || $table === 'teacher' || $table === 'student'){
-        $conditions = ['Id' => $params['Id'] ?? null];
-    } else if($table === 'account'){
-        // Check cả 'id' và 'Id'
-        $id = $params['id'] ?? $params['Id'] ?? null;
-        if ($id) {
-            $conditions = ['id' => $id];
-        } elseif (!empty($params['email'])) {
-            $conditions = ['email' => $params['email']];
-        } else {
-            $conditions = [];
-        }
-    } else {
-        $conditions = array_filter($params, fn($key) => !in_array($key, ['table', 'action', 'csrf_token', 'email', 'roles']), ARRAY_FILTER_USE_KEY);
-    }
-    
-    if (!empty($conditions) && !in_array(null, $conditions, true)) {
-        if ($this->dataController->deleteData($table, $conditions)) {
-            return [
-                'status' => 'success',
-                'message' => 'Xóa thành công'
-            ];
-        }
-        return [
-            'status' => 'error',
-            'message' => 'Xóa thất bại',
-            'conditions' => $conditions
-        ];
-    }
-    return [
-        'status' => 'error',
-        'message' => 'Thiếu điều kiện'
-    ];
+                $table = $params['table'] ?? 'account';
+                if ($table === 'classes' || $table === 'teacher' || $table === 'student'){
+                    $conditions = ['Id' => $params['Id'] ?? null];
+                } else if($table === 'account'){
+                    $conditions = ['id' => $params['Id'] ?? null];
+                } else{
+                    $conditions = array_filter($params, fn($key) => !in_array($key, ['table', 'action', 'csrf_token', 'email', 'roles']), ARRAY_FILTER_USE_KEY);
+                }
+                if (!empty($conditions)) {
+                    if ($this->dataController->deleteData($table, $conditions)) {
+                        return [
+                            'status' => 'success',
+                            'message' => 'Xóa thành công'
+                        ];
+                    }
+                    return [
+                        'status' => 'error',
+                        'message' => 'Xóa thất bại',
+                        'conditions' => $conditions
+                    ];
+                }
+                return [
+                    'status' => 'error',
+                    'message' => 'Thiếu điều kiện'
+                ];
 
             case 'refresh_token':
                 $table = $params['table'] ?? 'user_tokens';
@@ -556,9 +520,11 @@ class ApiController {
                 ];
 
             case 'logout':
-                $table = $params['table'] ?? 'user_tokens';
-                $google_id = $middlewareResult['GoogleID'] ?? null;
-                if ($google_id) {
+                $table = 'user_tokens';
+                $email = $params['email'] ?? null;
+                $user = $this->authController->GetUserByEmail($email);
+                $google_id = $user['GoogleID'] ?? null;
+                if ($email) {
                     if ($this->dataController->deleteData($table, ['google_id' => $google_id])) {
                         return [
                             'status' => 'success',
@@ -567,74 +533,42 @@ class ApiController {
                     }
                     return [
                         'status' => 'error',
-                        'message' => 'Đăng xuất thất bại'
+                        'message' => 'Đăng xuất thất bại',
+                        'google_id' => $google_id
                     ];
                 }
                 return [
                     'status' => 'error',
-                    'message' => 'Không tìm thấy GoogleID'
+                    'message' => 'Không tìm thấy email'
                 ];
 
             case 'autoGet':
-    $table   = $params['table'] ?? '';
-    $columns = $params['columns'] ?? ['*'];
-    $join    = $params['join'] ?? [];
+                $method = $params['method'] ?? '';
+                $tables = $params['table'] ?? '';
+                $columns = $params['columns'] ?? ['*'];
+                $join = $params['join'] ?? [];
+                if (isset($params['where']) && is_array($params['where'])) {
+                    // Giữ nguyên nếu đã là mảng
+                    $conditions = $params['where'];
+                }else{
+                    $conditions = $params['conditions'] ?? [];
+                }
+                //$conditions = $params['conditions'] ?? [];
+                $groupBy = $params['groupBy'] ?? [];
 
-    // ✅ Xử lý cả where VÀ conditions
-    $where = [];
-    
-    // Đọc từ 'where' trước
-    if (!empty($params['where']) && is_array($params['where']) && !isset($params['where'][0])) {
-        $where = $params['where'];
-    }
-    
-    // ✅ THÊM: Đọc từ 'conditions' (nếu có)
-    if (!empty($params['conditions']) && is_array($params['conditions']) && !isset($params['conditions'][0])) {
-        $where = array_merge($where, $params['conditions']);
-    }
-    
-    // Xử lý whereIn
-    if (!empty($params['whereIn'])) {
-        foreach ($params['whereIn'] as $field => $values) {
-            if (is_array($values) && !empty($values)) {
-                $where[$field] = $values;
-            }
-        }
-    }
-
-    // Xử lý orderBy
-    $orderBy = '';
-    if (!empty($params['orderBy']) && is_array($params['orderBy'])) {
-        $parts = [];
-        foreach ($params['orderBy'] as $col => $dir) {
-            $dir = strtoupper($dir) === 'DESC' ? 'DESC' : 'ASC';
-            $parts[] = "`$col` $dir";
-        }
-        $orderBy = implode(', ', $parts);
-    }
-
-    $result = $this->modelSQL->autoQuery(
-        $table,
-        $columns,
-        $join,
-        $where,
-        $params['groupBy'] ?? '',
-        $orderBy
-    );
-
-    $data = [];
-    if ($result instanceof mysqli_result) {
-        while ($row = $result->fetch_assoc()) {
-            $data[] = $row;
-        }
-        $result->free();
-    }
-
-    return [
-        'status' => 'success',
-        'data'   => $data,
-        'count'  => count($data)
-    ];
+                $result = $this->modelSQL->autoQuery($tables, $columns, $join, $conditions, $groupBy);
+                $data = [];
+                if ($result instanceof mysqli_result) {
+                    while ($row = $result->fetch_assoc()) {
+                        $data[] = $row;
+                    }
+                } else {
+                    $data = $result;
+                }
+                return [
+                    'status' => 'success',
+                    'data' => $data
+                ];
             case 'autoUpdate':
                 $table = $params['table'] ?? '';
                 $data = $params['data'] ?? [];
@@ -654,13 +588,6 @@ class ApiController {
                 header('Content-Type: application/json');
                 echo json_encode($res);
                 return;
-    //         case 'ping':
-    // return [
-    //     'status' => 'success',
-    //     'message' => 'Pong! API is alive.',
-    //     'timestamp' => date('c'),
-    //     'server' => $_SERVER['SERVER_NAME']
-    // ];
             default:
                 return [
                     'status' => 'error',

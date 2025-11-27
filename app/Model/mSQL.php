@@ -223,36 +223,6 @@ class ModelSQL extends Connect {
         return $this->executeQuery($sql, $params, $types) !== false;
     }
 
-    /**
-     * Tự động tạo truy vấn SELECT với JOIN và điều kiện
-     */
-    // public function autoQuery($tables, $columns = ['*'], $join = [], $conditions = []) {
-    //     $sql = "SELECT " . implode(", ", $columns) . " FROM ";
-    //     $params = [];
-    //     $types = '';
-
-    //     if (is_array($tables)) {
-    //         $sql .= $tables[0];
-    //         if (!empty($join) && isset($join['type'], $join['on'], $tables[1])) {
-    //             $sql .= " {$join['type']} JOIN {$tables[1]} ON " . implode(" AND ", $join['on']);
-    //         }
-    //     } else {
-    //         $sql .= $tables;
-    //     }
-
-    //     if (!empty($conditions)) {
-    //         $sql .= " WHERE ";
-    //         $conds = [];
-    //         foreach ($conditions as $field => $value) {
-    //             $conds[] = "$field = ?";
-    //             $params[] = $value;
-    //             $types .= is_int($value) ? 'i' : 's';
-    //         }
-    //         $sql .= implode(" AND ", $conds);
-    //     }
-
-    //     return $this->executeQuery($sql, $params, $types);
-    // }
     public function autoQuery($tables, $columns = ['*'], $join = [], $conditions = [], $groupBy = '', $orderBy = '') {
         // 1️⃣ Bắt đầu câu SQL cơ bản
         $sql = "SELECT " . implode(", ", $columns) . " FROM ";
@@ -389,40 +359,52 @@ class ModelSQL extends Connect {
                 }
                 $opInsertIds = [];
                 foreach ($rows as $row) {
-                    $columns = array_keys($row);
-                    $placeholders = implode(", ", array_fill(0, count($columns), "?"));
-                    $colsSql = implode("`, `", $columns);
-                    $sql = "INSERT INTO `$table` (`$colsSql`) VALUES ($placeholders)";
-                    $stmt = $con->prepare($sql);
-                    if ($stmt === false) {
-                        throw new Exception("Prepare failed: " . $con->error);
+                    // Lọc các key theo cột thực tế của bảng để tránh lỗi Unknown column
+                    $allowedCols = $this->getTableColumns($table);
+                    $filteredRow = [];
+                    foreach ($row as $k => $v) {
+                        if (in_array($k, $allowedCols, true)) $filteredRow[$k] = $v;
+                        else {
+                            foreach ($allowedCols as $col) if (strcasecmp($col, $k) === 0) { $filteredRow[$col] = $v; break; }
+                        }
                     }
-
-                    // build types and params
-                    $types = "";
-                    $params = [];
-                    foreach ($columns as $c) {
-                        $val = $row[$c];
+                    if (empty($filteredRow)) {
+                        throw new Exception("No valid columns for table $table in row payload");
+                    }
+                    $columns = array_keys($filteredRow);
+                     $placeholders = implode(", ", array_fill(0, count($columns), "?"));
+                     $colsSql = implode("`, `", $columns);
+                     $sql = "INSERT INTO `$table` (`$colsSql`) VALUES ($placeholders)";
+                     $stmt = $con->prepare($sql);
+                     if ($stmt === false) {
+                         throw new Exception("Prepare failed: " . $con->error);
+                     }
+ 
+                     // build types and params
+                     $types = "";
+                     $params = [];
+                     foreach ($columns as $c) {
+                        $val = $filteredRow[$c];
                         $params[] = $val;
                         if (is_int($val)) $types .= "i";
                         elseif (is_float($val)) $types .= "d";
                         else $types .= "s";
-                    }
-
-                    // bind params dynamically (by reference)
-                    $bindParams = [];
-                    $bindParams[] = & $types;
-                    for ($i = 0; $i < count($params); $i++) {
-                        $bindParams[] = & $params[$i];
-                    }
-                    call_user_func_array(array($stmt, 'bind_param'), $bindParams);
-
-                    if (!$stmt->execute()) {
-                        throw new Exception("Execute failed: " . $stmt->error);
-                    }
-                    $opInsertIds[] = $con->insert_id;
-                    $stmt->close();
-                }
+                     }
+ 
+                     // bind params dynamically (by reference)
+                     $bindParams = [];
+                     $bindParams[] = & $types;
+                     for ($i = 0; $i < count($params); $i++) {
+                         $bindParams[] = & $params[$i];
+                     }
+                     call_user_func_array(array($stmt, 'bind_param'), $bindParams);
+ 
+                     if (!$stmt->execute()) {
+                         throw new Exception("Execute failed: " . $stmt->error);
+                     }
+                     $opInsertIds[] = $con->insert_id;
+                     $stmt->close();
+                 }
                 $allResults[] = ['status' => 'success', 'insert_ids' => $opInsertIds];
             }
             $con->commit();
@@ -434,214 +416,4 @@ class ModelSQL extends Connect {
     }
 
 }
-
-    /**
-     * Tự động chèn một hoặc nhiều hàng vào một bảng bằng cách sử dụng một giao dịch.
-     * @param string $table Tên bảng.
-     * @param array $data Dữ liệu để chèn. Có thể là một mảng kết hợp cho một hàng hoặc một mảng của các mảng kết hợp cho nhiều hàng.
-     * @return bool Trả về true nếu thành công, false nếu thất bại.
-     */
-//     public function autoInsert($table, $data) {
-//         if (empty($data)) {
-//             return false;
-//         }
-//         // Nếu dữ liệu là một hàng đơn, hãy đặt nó vào một mảng để xử lý nhất quán
-//         if (!is_array(reset($data))) {
-//             $data = [$data];
-//         }
-
-//         $con = $this->openDB();
-//         $con->begin_transaction();
-
-//         try {
-//             // Lấy các cột từ hàng đầu tiên
-//             $columns = array_keys($data[0]);
-//             $columnSql = implode('`, `', $columns);
-//             $placeholderSql = implode(', ', array_fill(0, count($columns), '?'));
-//             $sql = "INSERT INTO `$table` (`$columnSql`) VALUES ($placeholderSql)";
-//             $stmt = $con->prepare($sql);
-
-//             // Xác định các loại tham số từ hàng đầu tiên
-//             $types = '';
-//             foreach ($data[0] as $value) {
-//                 if (is_int($value)) $types .= 'i';
-//                 elseif (is_float($value)) $types .= 'd';
-//                 else $types .= 's';
-//             }
-
-//             foreach ($data as $row) {
-//                 if (count($row) != count($columns)) {
-//                     throw new Exception("Số lượng cột không khớp.");
-//                 }
-//                 $stmt->bind_param($types, ...array_values($row));
-//                 $stmt->execute();
-//             }
-
-//             $con->commit();
-//             return true;
-//         } catch (Exception $e) {
-//             $con->rollback();
-//             // Ghi lại lỗi nếu cần
-//             error_log('autoInsert failed: ' . $e->getMessage());
-//             return false;
-//         }
-//     }
-
-//     /**
-//      * Tự động cập nhật các hàng trong một bảng dựa trên các điều kiện.
-//      * @param string $table Tên bảng.
-//      * @param array $data Một mảng kết hợp của dữ liệu để cập nhật (cột => giá trị).
-//      * @param array $conditions Một mảng kết hợp của các điều kiện cho mệnh đề WHERE (cột => giá trị).
-//      * @return bool Trả về true nếu thành công, false nếu thất bại.
-//      */
-//     public function autoUpdate($table, $data, $conditions) {
-//         if (empty($data) || empty($conditions)) {
-//             return false;
-//         }
-
-//         $params = [];
-//         $types = '';
-
-//         $setClauses = [];
-//         foreach ($data as $key => $value) {
-//             $setClauses[] = "`$key` = ?";
-//             $params[] = $value;
-//             if (is_int($value)) $types .= 'i';
-//             elseif (is_float($value)) $types .= 'd';
-//             else $types .= 's';
-//         }
-//         $sql = "UPDATE `$table` SET " . implode(', ', $setClauses);
-
-//         $whereClauses = [];
-//         foreach ($conditions as $key => $value) {
-//             $whereClauses[] = "`$key` = ?";
-//             $params[] = $value;
-//             if (is_int($value)) $types .= 'i';
-//             elseif (is_float($value)) $types .= 'd';
-//             else $types .= 's';
-//         }
-//         $sql .= " WHERE " . implode(' AND ', $whereClauses);
-
-//         return $this->executeQuery($sql, $params, $types) !== false;
-//     }
-
-//     /**
-//      * Tự động xóa các hàng khỏi một bảng dựa trên các điều kiện.
-//      * @param string $table Tên bảng.
-//      * @param array $conditions Một mảng kết hợp của các điều kiện cho mệnh đề WHERE (cột => giá trị).
-//      * @return bool Trả về true nếu thành công, false nếu thất bại.
-//      */
-//     public function autoDelete($table, $conditions) {
-//         if (empty($conditions)) {
-//             return false; // Ngăn chặn việc vô tình xóa tất cả các hàng
-//         }
-
-//         $params = [];
-//         $types = '';
-//         $whereClauses = [];
-//         foreach ($conditions as $key => $value) {
-//             $whereClauses[] = "`$key` = ?";
-//             $params[] = $value;
-//             if (is_int($value)) $types .= 'i';
-//             elseif (is_float($value)) $types .= 'd';
-//             else $types .= 's';
-//         }
-//         $sql = "DELETE FROM `$table` WHERE " . implode(' AND ', $whereClauses);
-
-//         return $this->executeQuery($sql, $params, $types) !== false;
-//     }
-// }
-
-// // require_once __DIR__ .'/mConnect.php';
-//     class ModelSQL extends connect{
-//         public function UpSQL($sql){       
-//             $con = $this->OpenDB(); 
-//             $result = mysqli_query($con,$sql);
-//             $this -> closeDB();
-//             return $result;
-//         }
-//         public function ViewData($table, $condition = []) {
-//             $con = $this->OpenDB();
-//             if (!empty($condition)) {
-//                 $keys = array_keys($condition);
-//                 $placeholders = implode(" AND ", array_map(fn($key) => "$key = ?", $keys));
-//                 $sql = "SELECT * FROM $table WHERE $placeholders";
-//                 $stmt = $con->prepare($sql);
-//                 $stmt->bind_param(str_repeat("s", count($condition)), ...array_values($condition));
-//             } else {
-//                 $sql = "SELECT * FROM $table";
-//                 $stmt = $con->prepare($sql);
-//             }
-//             $stmt->execute();
-//             $result = $stmt->get_result();
-//             $this->closeDB();
-//             return $result;
-//         }
-        
-//         // public function ViewData($table, $condition=array()){
-//         //     $whereClause ="";
-//         //     $wherePart = array();
-//         //     if(!empty($condition)){
-//         //         $p = new connect;
-//         //         $con= $p->OpenDB();
-//         //         foreach ($condition as $key => $value) {
-//         //             $wherePart[] = "$key = '" . mysqli_real_escape_string($con, $value) . "'";
-//         //         }
-//         //         $p->closeDB($con);
-//         //     }
-//         //     $whereClause = "WHERE " . implode(" AND ", $wherePart);
-//         //     if(!empty($condition)){
-//         //         $sql = "SELECT * FROM $table $whereClause";
-//         //     }else{
-//         //         $sql = "SELECT * FROM $table";
-//         //     }
-//         //     return $this->UpSQL($sql);
-//         //     // return $sql; 
-//         // }
-//         // public function Insert($table, $data) {
-//         //     $columns = implode(",", array_keys($data));
-//         //     $values = implode("','", array_values($data));
-//         //     $sql = "INSERT INTO $table ($columns) VALUES ('$values')";
-//         //     return $this->UpSQL($sql);
-//         // }
-//         public function Insert($table, $data) {
-//             $con = $this->OpenDB();
-//             $columns = implode(",", array_keys($data));
-//             $placeholders = implode(",", array_fill(0, count($data), "?"));
-//             $sql = "INSERT INTO $table ($columns) VALUES ($placeholders)
-//                     ON DUPLICATE KEY UPDATE " . implode(", ", array_map(fn($key) => "$key=VALUES($key)", array_keys($data)));
-//             $stmt = $con->prepare($sql);
-//             $stmt->bind_param(str_repeat("s", count($data)), ...array_values($data));
-//             $result = $stmt->execute();
-//             $this->closeDB();
-//             return $result;
-//         }
-//         // public function Update($table, $data, $condition) {
-//         //     $setValues = array();
-//         //     foreach ($data as $key => $value) {
-//         //         $setValues[] = "$key = '$value'";
-//         //     }
-//         //     $setClause = implode(", ", $setValues);
-//         //     $sql = "UPDATE $table SET $setClause WHERE $condition";
-//         //     return $this->UpSQL($sql);
-//         // }
-//         public function Update($table, $data, $condition) {
-//             $con = $this->OpenDB();
-//             $setValues = array();
-//             foreach ($data as $key => $value) {
-//                 $setValues[] = "$key = ?";
-//             }
-//             $sql = "UPDATE $table SET " . implode(", ", $setValues) . " WHERE $condition";
-//             $stmt = $con->prepare($sql);
-//             $stmt->bind_param(str_repeat("s", count($data)), ...array_values($data));
-//             $result = $stmt->execute();
-//             $this->closeDB();
-//             return $result;
-//         }
-    
-//         public function Delete($table, $condition) {
-//             $sql = "DELETE FROM $table WHERE $condition";
-//             return $this->UpSQL($sql);
-//         }
-//     }
 ?>
