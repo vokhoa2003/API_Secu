@@ -413,6 +413,8 @@ class ApiController {
                 // 1. Ưu tiên dùng Id (cho classes, teacher, student)
                 if (!empty($params['id'])) {
                     $conditions['id'] = $params['id'];
+                } elseif (!empty($params['Id'])) {
+                    $conditions['Id'] = $params['Id'];
                 }
                 // 2. Nếu không có Id và là bảng account → dùng email
                 elseif ($table === 'account' && !empty($email)) {

@@ -214,9 +214,21 @@ class ModelSQL extends Connect {
         $types = "";
         
         foreach ($conditions as $key => $value) {
-            $where[] = "$key = ?";
-            $params[] = $value;
-            $types .= is_int($value) ? "i" : "s";
+        // Nếu là mảng → dùng IN (...)
+            if (is_array($value)) {
+                $placeholders = implode(",", array_fill(0, count($value), "?"));
+                $where[] = "$key IN ($placeholders)";
+
+                foreach ($value as $v) {
+                    $params[] = $v;
+                    $types .= is_int($v) ? "i" : "s";
+                }
+            } else {
+                // Giá trị đơn → WHERE key = ?
+                $where[] = "$key = ?";
+                $params[] = $value;
+                $types .= is_int($value) ? "i" : "s";
+            }
         }
         
         $sql = "DELETE FROM $table WHERE " . implode(" AND ", $where);
