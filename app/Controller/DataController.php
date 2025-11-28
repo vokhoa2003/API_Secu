@@ -60,7 +60,7 @@ class DataController {
         $data['UpdateDate'] = date('Y-m-d H:i:s');
 
         return $this->modelSQL->update($table, $data, $conditions);
-        }
+    }
 
         /**
          * Xóa dữ liệu
