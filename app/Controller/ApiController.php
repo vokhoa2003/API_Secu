@@ -398,20 +398,25 @@ class ApiController {
 
             case 'AdminUpdate':
                 $table = $params['table'] ?? 'account';
-                
+                $id = $params['id'] ?? null;
+                $email = $params['emailUpdate'] ?? null;
+                $adminEmail = $params['email'] ?? null;
+                $params['email'] = $params['emailUpdate'] ?? null;
+                $adminRoles = $params['role'] ?? null;
+                $params['role'] = $params['roleUpdate'] ?? null;
                 // Lấy dữ liệu cần cập nhật (loại bỏ các key không phải cột)
-                $data = array_filter($params, fn($key) => !in_array($key, ['table', 'action', 'csrf_token', 'GoogleID']), ARRAY_FILTER_USE_KEY);
+                $data = array_filter($params, fn($key) => !in_array($key, ['table', 'action', 'csrf_token', 'GoogleID', 'emailUpdate', 'roleUpdate']), ARRAY_FILTER_USE_KEY);
 
                 // Xây dựng điều kiện tìm bản ghi
                 $conditions = [];
 
                 // 1. Ưu tiên dùng Id (cho classes, teacher, student)
-                if (!empty($params['Id'])) {
-                    $conditions['Id'] = $params['Id'];
+                if (!empty($params['id'])) {
+                    $conditions['id'] = $params['id'];
                 }
                 // 2. Nếu không có Id và là bảng account → dùng email
-                elseif ($table === 'account' && !empty($params['email'])) {
-                    $conditions['email'] = $params['email'];
+                elseif ($table === 'account' && !empty($email)) {
+                    $conditions['email'] = $email;
                 }
                 // 3. Trường hợp lỗi
                 else {
@@ -439,7 +444,11 @@ class ApiController {
 
                 return [
                     'status' => 'error',
-                    'message' => 'Cập nhật thất bại'
+                    'message' => 'Cập nhật thất bại',
+                    'conditions' => $conditions,
+                    'data' => $data,
+                    'params' => $params,
+                    'adminEmail' => $adminEmail
                 ];
             case 'update':
                 if($params['role'] === 'student' && $params['table'] === 'account'){
