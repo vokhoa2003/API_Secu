@@ -69,5 +69,4 @@ class DataController {
             return $this->modelSQL->delete($table, $conditions);
     }
 }
-
 ?>
