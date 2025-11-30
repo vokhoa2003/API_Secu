@@ -85,15 +85,12 @@ class ApiController {
     
     $tokenInfo = json_decode($response, true);
     
-    // Kiểm tra token còn hạn và thuộc về app của bạn
+    // Kiểm tra token còn hạn và thuộc về app 
     if (!isset($tokenInfo['email']) || 
         !isset($tokenInfo['exp']) || 
         $tokenInfo['exp'] < time()) {
         return false;
     }
-    
-    // Optional: Verify client_id nếu cần
-    // if ($tokenInfo['aud'] !== 'YOUR_CLIENT_ID') return false;
     
     return $tokenInfo;
 }
@@ -137,6 +134,21 @@ class ApiController {
                 $expires_at = $params['expires_at'] ?? null;
 
                 if ($email && $full_name && $access_token && $expires_at) {
+                    //Verify token với Google
+        $tokenInfo = $this->verifyGoogleToken($access_token);
+        if ($tokenInfo === false) {
+            return [
+                'status' => 'error',
+                'message' => 'Google access token không hợp lệ hoặc đã hết hạn'
+            ];
+        }
+        //Verify email khớp
+        if ($tokenInfo['email'] !== $email) {
+            return [
+                'status' => 'error',
+                'message' => 'Email không khớp với Google token'
+            ];
+        }
                     // ưu tiên tìm bằng GoogleID nếu có
                     $user = null;
                     if ($google_id) {
@@ -240,19 +252,19 @@ class ApiController {
                 $expires_at = $params['expires_at'] ?? null;
 
                 if ($email && $full_name && $access_token && $expires_at) {
-                    // ✅ THÊM: Verify token với Google
+                    //Verify token với Google
         $tokenInfo = $this->verifyGoogleToken($access_token);
         if ($tokenInfo === false) {
             return [
                 'status' => 'error',
-                'message' => 'Invalid Google access token'
+                'message' => 'Google access token không hợp lệ hoặc đã hết hạn'
             ];
         }
-        // ✅ THÊM: Verify email khớp
+        //Verify email khớp
         if ($tokenInfo['email'] !== $email) {
             return [
                 'status' => 'error',
-                'message' => 'Email mismatch'
+                'message' => 'Email không khớp với Google token'
             ];
         }
                     // Tìm user theo GoogleID nếu có
