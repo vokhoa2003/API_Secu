@@ -67,6 +67,37 @@ class ApiController {
         return true;
     }
 
+    private function verifyGoogleToken($accessToken) {
+    $url = 'https://oauth2.googleapis.com/tokeninfo?access_token=' . urlencode($accessToken);
+    
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, $url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+    
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    
+    if ($httpCode !== 200) {
+        return false;
+    }
+    
+    $tokenInfo = json_decode($response, true);
+    
+    // Kiểm tra token còn hạn và thuộc về app của bạn
+    if (!isset($tokenInfo['email']) || 
+        !isset($tokenInfo['exp']) || 
+        $tokenInfo['exp'] < time()) {
+        return false;
+    }
+    
+    // Optional: Verify client_id nếu cần
+    // if ($tokenInfo['aud'] !== 'YOUR_CLIENT_ID') return false;
+    
+    return $tokenInfo;
+}
+
     public function handleRequest($action, $params) {
         error_log("Action: $action");
         error_log("Params: " . print_r($params, true));
@@ -209,6 +240,21 @@ class ApiController {
                 $expires_at = $params['expires_at'] ?? null;
 
                 if ($email && $full_name && $access_token && $expires_at) {
+                    // ✅ THÊM: Verify token với Google
+        $tokenInfo = $this->verifyGoogleToken($access_token);
+        if ($tokenInfo === false) {
+            return [
+                'status' => 'error',
+                'message' => 'Invalid Google access token'
+            ];
+        }
+        // ✅ THÊM: Verify email khớp
+        if ($tokenInfo['email'] !== $email) {
+            return [
+                'status' => 'error',
+                'message' => 'Email mismatch'
+            ];
+        }
                     // Tìm user theo GoogleID nếu có
                     $existingUser = null;
                     if ($google_id) {
