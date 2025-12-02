@@ -32,7 +32,7 @@ class ApiController {
             // cookie token (của trình duyệt)
             $cookieToken = $_COOKIE['csrf_token'] ?? null;
 
-            // server-side session token (nếu bạn lưu)
+            // server-side session token 
             if (session_status() !== PHP_SESSION_ACTIVE) @session_start();
             $sessionToken = $_SESSION['csrf_token'] ?? null;
 
@@ -120,12 +120,12 @@ class ApiController {
     }
 
         //Kiểm tra CSRF token (truyền action để special-case app_login)
-        if (!$this->checkCsrf($params, $action)) {
-            return [
-                'status' => 'error',
-                'message' => 'Invalid CSRF token'
-            ];
-        }
+        // if (!$this->checkCsrf($params, $action)) {
+        //     return [
+        //         'status' => 'error',
+        //         'message' => 'Invalid CSRF token'
+        //     ];
+        // }
 
         //Chỉ xác thực token với các action cần bảo vệ
         $actionsRequireAuth = ['get', 'update', 'delete', 'logout', 'refresh_token', 'autoGet', 'autoUpdate', 'AdminUpdate', 'muitiInsert'];
@@ -382,7 +382,7 @@ class ApiController {
                 $columns = $params['columns'] ?? ['*'];
                 $orderBy = $params['orderBy'] ?? '';
                 if ($table === 'account'){
-                // Chỉ cho phép khách hàng xem dữ liệu của chính mình
+                // Chỉ cho phép teacher và student xem dữ liệu của chính mình
                     if ($params['role'] === 'student') {
                         $conditions = ['email' => $params['email']];
                     } elseif ($params['role'] === 'admin') {
@@ -482,6 +482,8 @@ class ApiController {
                     'status' => 'error',
                     'message' => 'Thiếu thông tin'
                 ];
+
+            
 
             case 'AdminUpdate':
                 // ✅ Rate limit: Max 50 updates/phút
