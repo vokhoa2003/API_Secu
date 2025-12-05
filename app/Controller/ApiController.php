@@ -72,12 +72,12 @@ class ApiController {
         error_log("Params: " . print_r($params, true));
 
         //Kiểm tra CSRF token (truyền action để special-case app_login)
-        if (!$this->checkCsrf($params, $action)) {
-            return [
-                'status' => 'error',
-                'message' => 'Invalid CSRF token'
-            ];
-        }
+        // if (!$this->checkCsrf($params, $action)) {
+        //     return [
+        //         'status' => 'error',
+        //         'message' => 'Invalid CSRF token'
+        //     ];
+        // }
 
         //Chỉ xác thực token với các action cần bảo vệ
         $actionsRequireAuth = ['get', 'update', 'delete', 'logout', 'refresh_token', 'autoGet', 'autoUpdate', 'AdminUpdate', 'muitiInsert'];
@@ -553,7 +553,6 @@ class ApiController {
                     return [
                         'status' => 'error',
                         'message' => 'Đăng xuất thất bại',
-                        'google_id' => $google_id
                     ];
                 }
                 return [

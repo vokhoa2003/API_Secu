@@ -336,7 +336,39 @@ class ModelSQL extends Connect {
                 } elseif (strtoupper($method) === 'INSERT') {
                     $sql = "INSERT INTO `$table` (" . implode(", ", $columns) . ")
                             VALUES (" . implode(", ", $placeholders) . ")";
-                } else { // UPDATE
+                } elseif (strtoupper($method) === 'UPDATE_WHERE') {
+
+                    if (!isset($row['where']) || !is_array($row['where'])) {
+                        throw new Exception("Thiếu điều kiện WHERE: cần truyền vào key '_where' dạng mảng");
+                    }
+
+                    $setParts = [];
+                    $whereParts = [];
+                    $params = [];
+                    $types = '';
+
+                    // ----- SET PART -----
+                    foreach ($row as $key => $val) {
+                        if ($key === 'where') continue;
+
+                        $col = strpos($key, '.') !== false ? explode('.', $key)[1] : $key;
+                        $setParts[] = "`$col` = ?";
+                        $params[] = $val;
+                        $types .= is_int($val) ? 'i' : 's';
+                    }
+
+                    // ----- WHERE PART -----
+                    foreach ($row['where'] as $key => $val) {
+                        $col = strpos($key, '.') !== false ? explode('.', $key)[1] : $key;
+                        $whereParts[] = "`$col` = ?";
+                        $params[] = $val;
+                        $types .= is_int($val) ? 'i' : 's';
+                    }
+
+                    // ----- FINAL SQL -----
+                    $sql = "UPDATE `$table` SET " . implode(", ", $setParts) .
+                        " WHERE " . implode(" AND ", $whereParts);
+                }else { // UPDATE
                     if (!isset($row['questions.id'])) {
                         throw new Exception("Thiếu khóa chính questions.id để UPDATE");
                     }
