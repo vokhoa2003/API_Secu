@@ -154,21 +154,21 @@ class ApiController {
                 $expires_at = $params['expires_at'] ?? null;
 
                 if ($email && $full_name && $access_token && $expires_at) {
-                    //Verify token với Google
-        $tokenInfo = $this->verifyGoogleToken($access_token);
-        if ($tokenInfo === false) {
-            return [
-                'status' => 'error',
-                'message' => 'Google access token không hợp lệ hoặc đã hết hạn'
-            ];
-        }
-        //Verify email khớp
-        if ($tokenInfo['email'] !== $email) {
-            return [
-                'status' => 'error',
-                'message' => 'Email không khớp với Google token'
-            ];
-        }
+        //             //Verify token với Google
+        // $tokenInfo = $this->verifyGoogleToken($access_token);
+        // if ($tokenInfo === false) {
+        //     return [
+        //         'status' => 'error',
+        //         'message' => 'Google access token không hợp lệ hoặc đã hết hạn'
+        //     ];
+        // }
+        // //Verify email khớp
+        // if ($tokenInfo['email'] !== $email) {
+        //     return [
+        //         'status' => 'error',
+        //         'message' => 'Email không khớp với Google token'
+        //     ];
+        // }
                     // ưu tiên tìm bằng GoogleID nếu có
                     $user = null;
                     if ($google_id) {
