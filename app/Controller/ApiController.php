@@ -4,16 +4,19 @@ require_once __DIR__ . '/../Model/mSQL.php';
 require_once __DIR__ . '/DataController.php';
 require_once __DIR__ . '/AuthController.php';
 require_once __DIR__ . '/../Middleware/AuthMiddleware.php';
+require_once __DIR__ . '/../Middleware/RateLimiter.php';
 
 class ApiController {
     private $dataController;
     private $authController;
     private $modelSQL;
+    private $rateLimiter;
 
     public function __construct() {
         $this->dataController = new DataController();
         $this->authController = new AuthController();
         $this->modelSQL = new ModelSQL();
+        $this->rateLimiter = new RateLimiter();
     }
 
     // Thay thế hàm checkCsrf hiện tại bằng phiên bản nhận thêm $action
@@ -29,7 +32,7 @@ class ApiController {
             // cookie token (của trình duyệt)
             $cookieToken = $_COOKIE['csrf_token'] ?? null;
 
-            // server-side session token (nếu bạn lưu)
+            // server-side session token 
             if (session_status() !== PHP_SESSION_ACTIVE) @session_start();
             $sessionToken = $_SESSION['csrf_token'] ?? null;
 
@@ -67,9 +70,54 @@ class ApiController {
         return true;
     }
 
+    private function verifyGoogleToken($accessToken) {
+    $url = 'https://oauth2.googleapis.com/tokeninfo?access_token=' . urlencode($accessToken);
+    
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, $url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+    
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    
+    if ($httpCode !== 200) {
+        return false;
+    }
+    
+    $tokenInfo = json_decode($response, true);
+    
+    // Kiểm tra token còn hạn và thuộc về app 
+    if (!isset($tokenInfo['email']) || 
+        !isset($tokenInfo['exp']) || 
+        $tokenInfo['exp'] < time()) {
+        return false;
+    }
+    
+    return $tokenInfo;
+}
+
     public function handleRequest($action, $params) {
         error_log("Action: $action");
         error_log("Params: " . print_r($params, true));
+
+        // ==========================================
+    // 🔴 RATE LIMIT CHO LOGIN - TRƯỚC KHI CHECK CSRF
+    // ==========================================
+    if ($action === 'app_login' || $action === 'login') {
+        $ip = $_SERVER['REMOTE_ADDR'];
+        
+        // ✅ Max 10 login attempts trong 5 phút
+        if (!$this->rateLimiter->check('login:' . $ip, 10, 300)) {
+            http_response_code(429); // Too Many Requests
+            return [
+                'status' => 'error',
+                'message' => 'Quá nhiều lần thử đăng nhập. Vui lòng thử lại sau 5 phút.',
+                'retry_after' => 300
+            ];
+        }
+    }
 
         //Kiểm tra CSRF token (truyền action để special-case app_login)
         // if (!$this->checkCsrf($params, $action)) {
@@ -106,6 +154,21 @@ class ApiController {
                 $expires_at = $params['expires_at'] ?? null;
 
                 if ($email && $full_name && $access_token && $expires_at) {
+        //             //Verify token với Google
+        // $tokenInfo = $this->verifyGoogleToken($access_token);
+        // if ($tokenInfo === false) {
+        //     return [
+        //         'status' => 'error',
+        //         'message' => 'Google access token không hợp lệ hoặc đã hết hạn'
+        //     ];
+        // }
+        // //Verify email khớp
+        // if ($tokenInfo['email'] !== $email) {
+        //     return [
+        //         'status' => 'error',
+        //         'message' => 'Email không khớp với Google token'
+        //     ];
+        // }
                     // ưu tiên tìm bằng GoogleID nếu có
                     $user = null;
                     if ($google_id) {
@@ -209,6 +272,21 @@ class ApiController {
                 $expires_at = $params['expires_at'] ?? null;
 
                 if ($email && $full_name && $access_token && $expires_at) {
+                    //Verify token với Google
+        $tokenInfo = $this->verifyGoogleToken($access_token);
+        if ($tokenInfo === false) {
+            return [
+                'status' => 'error',
+                'message' => 'Google access token không hợp lệ hoặc đã hết hạn'
+            ];
+        }
+        //Verify email khớp
+        if ($tokenInfo['email'] !== $email) {
+            return [
+                'status' => 'error',
+                'message' => 'Email không khớp với Google token'
+            ];
+        }
                     // Tìm user theo GoogleID nếu có
                     $existingUser = null;
                     if ($google_id) {
@@ -304,7 +382,7 @@ class ApiController {
                 $columns = $params['columns'] ?? ['*'];
                 $orderBy = $params['orderBy'] ?? '';
                 if ($table === 'account'){
-                // Chỉ cho phép khách hàng xem dữ liệu của chính mình
+                // Chỉ cho phép teacher và student xem dữ liệu của chính mình
                     if ($params['role'] === 'student') {
                         $conditions = ['email' => $params['email']];
                     } elseif ($params['role'] === 'admin') {
@@ -360,6 +438,15 @@ class ApiController {
                 ];
 
             case 'add':
+                // ✅ Rate limit: Max 50 creations/phút
+            $userId = $this->getUserIdFromParams($params);
+            if ($userId && !$this->rateLimiter->check('add:' . $userId, 50, 60)) {
+                http_response_code(429);
+                return [
+                    'status' => 'error',
+                    'message' => 'Bạn tạo dữ liệu quá nhanh. Vui lòng chậm lại.'
+                ];
+            }
                 $table = $params['table'] ?? 'account';
                 $data = array_filter($params, fn($key) => !in_array($key, ['table', 'action', 'csrf_token']), ARRAY_FILTER_USE_KEY);
                 $data['role'] = $data['role'] ?? 'customer';
@@ -396,7 +483,18 @@ class ApiController {
                     'message' => 'Thiếu thông tin'
                 ];
 
+            
+
             case 'AdminUpdate':
+                // ✅ Rate limit: Max 50 updates/phút
+            $userId = $this->getUserIdFromParams($params);
+            if ($userId && !$this->rateLimiter->check('AdminUpdate:' . $userId, 50, 60)) {
+                http_response_code(429);
+                return [
+                    'status' => 'error',
+                    'message' => 'Bạn cập nhật quá nhanh. Vui lòng chậm lại.'
+                ];
+            }
                 $table = $params['table'] ?? 'account';
                 $id = $params['id'] ?? null;
                 $email = $params['emailUpdate'] ?? null;
@@ -461,6 +559,15 @@ class ApiController {
                     'adminEmail' => $adminEmail
                 ];
             case 'update':
+                // ✅ Rate limit: Max 50 updates/phút
+            $userId = $this->getUserIdFromParams($params);
+            if ($userId && !$this->rateLimiter->check('update:' . $userId, 50, 60)) {
+                http_response_code(429);
+                return [
+                    'status' => 'error',
+                    'message' => 'Bạn cập nhật quá nhanh. Vui lòng chậm lại.'
+                ];
+            }
                 if($params['role'] === 'student' && $params['table'] === 'account'){
                     $table = $params['table'] ?? 'account';
                     $data = array_filter($params, fn($key) => !in_array($key, ['table', 'action', 'csrf_token', 'GoogleID']), ARRAY_FILTER_USE_KEY);
@@ -491,6 +598,15 @@ class ApiController {
                 }
 
             case 'delete':
+                // ✅ Rate limit: Max 20 deletes/phút (nghiêm hơn vì xóa nguy hiểm)
+            $userId = $this->getUserIdFromParams($params);
+            if ($userId && !$this->rateLimiter->check('delete:' . $userId, 20, 60)) {
+                http_response_code(429);
+                return [
+                    'status' => 'error',
+                    'message' => 'Bạn xóa quá nhiều. Vui lòng kiểm tra lại.'
+                ];
+            }
                 $table = $params['table'] ?? 'account';
                 if ($table === 'classes' || $table === 'teacher' || $table === 'student'){
                     $conditions = ['Id' => $params['Id'] ?? null];
@@ -588,6 +704,15 @@ class ApiController {
                     'data' => $data
                 ];
             case 'autoUpdate':
+                // ✅ Rate limit: Max 50 updates/phút
+            $userId = $this->getUserIdFromParams($params);
+            if ($userId && !$this->rateLimiter->check('autoUpdate:' . $userId, 50, 60)) {
+                http_response_code(429);
+                return [
+                    'status' => 'error',
+                    'message' => 'Bạn cập nhật quá nhanh. Vui lòng chậm lại.'
+                ];
+            }
                 $table = $params['table'] ?? '';
                 $data = $params['data'] ?? [];
                 $method = $params['method'] ?? 'UPSERT';
@@ -598,6 +723,15 @@ class ApiController {
                     'message' => $result['message']
                 ];
             case 'multiInsert':
+                // ✅ Rate limit: Max 10 bulk operations/phút
+            $userId = $this->getUserIdFromParams($params);
+            if ($userId && !$this->rateLimiter->check('bulk:' . $userId, 10, 60)) {
+                http_response_code(429);
+                return [
+                    'status' => 'error',
+                    'message' => 'Bạn thực hiện thao tác hàng loạt quá nhanh.'
+                ];
+            }
                 $operations = $params['operations'] ?? [];
                 // debug log
                 file_put_contents(__DIR__.'/../../multi_insert_debug.log', date('c')." multiInsert payload: "
@@ -613,5 +747,24 @@ class ApiController {
                 ];
         }
     }
+    // ==========================================
+// Helper method để lấy userId
+// ==========================================
+private function getUserIdFromParams($params) {
+    // Thử lấy từ email (sau khi auth)
+    if (isset($params['email'])) {
+        $user = $this->authController->GetUserByEmail($params['email']);
+        return $user['id'] ?? null;
+    }
+    
+    // Thử lấy từ GoogleID
+    if (isset($params['GoogleID'])) {
+        $user = $this->authController->GetUserIdByGoogleId($params['GoogleID']);
+        return $user['id'] ?? null;
+    }
+    
+    // Fallback: dùng IP nếu chưa login
+    return $_SERVER['REMOTE_ADDR'];
+}
 }
 ?>
