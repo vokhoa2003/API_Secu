@@ -17,7 +17,7 @@ if (!class_exists('JwtHandler')) {
                 "iss" => "API_Security",
                 "aud" => "user",
                 "iat" => time(),
-                "exp" => time() + 3600,
+                "exp" => time() + 120,
                 "data" =>[
                     "email" => $email,
                     "role" => $role,

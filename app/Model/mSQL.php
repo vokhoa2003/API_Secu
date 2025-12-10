@@ -2,20 +2,7 @@
 require_once __DIR__ . '/mConnect.php';
 
 class ModelSQL extends Connect {
-    /**
-     * Thực thi truy vấn SQL tùy chỉnh
-     */
-    // public function executeQuery($sql, $params = [], $types = "") {
-    //     $con = $this->openDB();
-    //     $stmt = $con->prepare($sql);
-    //     if (!empty($params)) {
-    //         $stmt->bind_param($types ?: str_repeat("s", count($params)), ...$params);
-    //     }
-    //     $stmt->execute();
-    //     $result = $stmt->get_result() ?: $stmt->affected_rows;
-    //     $stmt->close();
-    //     return $result;
-    // }
+   
     // Helper: lấy danh sách cột thực tế của bảng (trả array các tên cột)
     private function getTableColumns(string $table): array {
         $con = $this->openDB();
@@ -39,6 +26,8 @@ class ModelSQL extends Connect {
         $con = $this->openDB();
         try {
             $stmt = $con->prepare($sql);
+            // SQL không chứa dữ liệu người dùng → không thể Inject
+            // MySQL parse SQL trước, không bị phá vỡ cú pháp
             if ($stmt === false) {
                 @file_put_contents(__DIR__.'/../../logs/mssql_errors.log', date('c')." Prepare failed: ".$con->error."\nSQL: ".$sql."\nParams: ".json_encode($params)."\n", FILE_APPEND);
                 return false;
@@ -58,6 +47,9 @@ class ModelSQL extends Connect {
                     $i++;
                 }
                 call_user_func_array([$stmt, 'bind_param'], $bindParams);
+                // Giá trị người nhập vào được gửi tách biệt
+                // MySQL coi như data thuần, không phải SQL
+                // SQLi bị triệt tiêu vì attacker không thể chèn ' OR '1'='1 vào câu SQL
             }
 
             if (!$stmt->execute()) {
@@ -110,23 +102,7 @@ class ModelSQL extends Connect {
         return $result instanceof mysqli_result ? $result : false;
     }
 
-    /**
-     * Thêm hoặc cập nhật dữ liệu
-     */
-    // public function insert($table, $data, $onDuplicateKeyUpdate = true) {
-    //     $con = $this->openDB();
-    //     $columns = array_keys($data);
-    //     $placeholders = array_fill(0, count($data), "?");
-    //     $sql = "INSERT INTO $table (" . implode(",", $columns) . ") VALUES (" . implode(",", $placeholders) . ")";
-        
-    //     if ($onDuplicateKeyUpdate) {
-    //         $updates = array_map(fn($key) => "$key=VALUES($key)", $columns);
-    //         $sql .= " ON DUPLICATE KEY UPDATE " . implode(", ", $updates);
-    //     }
-        
-    //     $types = str_repeat("s", count($data)); // Có thể cải tiến để hỗ trợ kiểu dữ liệu khác
-    //     return $this->executeQuery($sql, array_values($data), $types) !== false;
-    // }
+    
     // Insert: giữ nguyên tên keys, lọc theo cột thật của bảng để tránh Unknown column
     public function insert($table, $data, $onDuplicateKeyUpdate = true) {
         $con = $this->openDB();
@@ -135,6 +111,8 @@ class ModelSQL extends Connect {
 
         // Lấy cột thật của bảng, lọc data
         $allowedCols = $this->getTableColumns($table);
+        // Kẻ tấn công không thể đặt key như "id; DROP TABLE users"
+        // Mọi key không tồn tại trong bảng → tự loại bỏ
         if (empty($allowedCols)) {
             @file_put_contents(__DIR__.'/../../logs/mssql_errors.log', date('c')." insert: table not found or no columns for $table\n", FILE_APPEND);
             return false;
