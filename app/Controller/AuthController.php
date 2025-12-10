@@ -36,15 +36,17 @@ class AuthController{
             return ["error" => "User is inactive"];
             exit;
         }
-        $token = $this->jwtHandler->createToken($user['email'], $user['role'], $user['id'], $user['FullName']);
+        $refreshToken = $this->jwtHandler->createRefreshToken($user['email'], $user['role'], $user['id'], $user['FullName']);
         error_log("Generated token: " . ($token ?? 'Null'));
         // json_encode(array("token" => $token));
-        if(!isset($token) || empty($token)){
+        if(!isset($refreshToken) || empty($refreshToken)){
             http_response_code(500);
             return ["error" => "Token generation failed"];
             exit;
         }
-        return ["status" => "success", "token" => $token];
+        return ["status" => "success", 
+        "refresh_token" => $refreshToken,
+        ];
         
     }
     public function GetUserIdByGoogleId($google_id, $table = 'account') {
@@ -91,7 +93,7 @@ class AuthController{
         $userData = $jwtHandler->verifyToken($token);
         if (!$userData) {
             http_response_code(401);
-            echo json_encode(["error" => "Invalid or expired token"], JSON_PRETTY_PRINT);
+            echo json_encode(["error" => "Invalid or expired token bearer"], JSON_PRETTY_PRINT);
             exit;
         }
 

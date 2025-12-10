@@ -30,7 +30,7 @@ class AuthMiddleware{
             $result = $jwtHandler->verifyToken($token);
             if($result === null){
                 http_response_code(401);
-                echo json_encode(array("error" => "Invalid or expired token"));
+                echo json_encode(array("error" => "Invalid or expired token authmiddleware"));
                 exit;
             }
 
