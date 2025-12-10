@@ -360,7 +360,7 @@ class ModelSQL extends Connect {
                     // ----- WHERE PART -----
                     foreach ($row['where'] as $key => $val) {
                         $col = strpos($key, '.') !== false ? explode('.', $key)[1] : $key;
-                        $whereParts[] = "`$col` = ?";
+                        $whereParts[] = "$col = ?";
                         $params[] = $val;
                         $types .= is_int($val) ? 'i' : 's';
                     }

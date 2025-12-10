@@ -5,18 +5,21 @@ require_once __DIR__ . '/DataController.php';
 require_once __DIR__ . '/AuthController.php';
 require_once __DIR__ . '/../Middleware/AuthMiddleware.php';
 require_once __DIR__ . '/../Middleware/RateLimiter.php';
+require_once __DIR__ . '/../../JwtHandler.php';
 
 class ApiController {
     private $dataController;
     private $authController;
     private $modelSQL;
     private $rateLimiter;
+    private $jwtHandler;
 
     public function __construct() {
         $this->dataController = new DataController();
         $this->authController = new AuthController();
         $this->modelSQL = new ModelSQL();
         $this->rateLimiter = new RateLimiter();
+        $this->jwtHandler = new JwtHandler();
     }
 
     // Thay thế hàm checkCsrf hiện tại bằng phiên bản nhận thêm $action
@@ -120,15 +123,15 @@ class ApiController {
     }
 
         //Kiểm tra CSRF token (truyền action để special-case app_login)
-        // if (!$this->checkCsrf($params, $action)) {
-        //     return [
-        //         'status' => 'error',
-        //         'message' => 'Invalid CSRF token'
-        //     ];
-        // }
+        if (!$this->checkCsrf($params, $action)) {
+            return [
+                'status' => 'error',
+                'message' => 'Invalid CSRF token'
+            ];
+        }
 
         //Chỉ xác thực token với các action cần bảo vệ
-        $actionsRequireAuth = ['get', 'update', 'delete', 'logout', 'refresh_token', 'autoGet', 'autoUpdate', 'AdminUpdate', 'muitiInsert'];
+        $actionsRequireAuth = ['get', 'update', 'delete', 'logout', 'autoGet', 'autoUpdate', 'AdminUpdate', 'muitiInsert'];
         if (in_array($action, $actionsRequireAuth)) {
             $middlewareResult = AuthMiddleware::verifyRequest($action);
             if (isset($middlewareResult['error'])) {
@@ -230,10 +233,29 @@ class ApiController {
                         }
                     }
 
-                    // Lưu token (refresh_token)
+                    // ✅ Block tất cả token cũ của user trước
+                    $googleIdForUpdate = $google_id ?? ($user['GoogleID'] ?? null);
+                    if ($googleIdForUpdate) {
+                        $blockOldTokens = [
+                            [
+                                'Status' => 'Blocked',
+                                'where' => [
+                                    'google_id' => $googleIdForUpdate,
+                                    'Status' => 'Active'
+                                ]
+                            ]
+                        ];
+                        $this->modelSQL->autoUpdate('user_tokens', $blockOldTokens, 'UPDATE_WHERE');
+                    }
+
+                    // Tạo token mới (refresh_token)
+                    $token = $this->authController->LoginWithGoogle($googleIdForUpdate);
+                    
+                    // Lưu token mới với trạng thái Active
                     $insertResult = $this->modelSQL->insert('user_tokens', [
-                        'google_id' => $google_id ?? ($user['GoogleID'] ?? null),
-                        'refresh_token' => $access_token,
+                        'google_id' => $googleIdForUpdate,
+                        'refresh_token' => $token['refresh_token'],
+                        'Status' => 'Active',
                         'expires_at' => $expires_at
                     ]);
 
@@ -244,16 +266,16 @@ class ApiController {
                         ];
                     }
 
-                    $token = $this->authController->LoginWithGoogle($google_id ?? ($user['GoogleID'] ?? null));
-                    if (isset($token['error']) || !$token['token']) {
+                    if (isset($token['error']) || !$token['refresh_token']) {
                         return [
                             'status' => 'error',
                             'message' => $token['error'] ?? 'Tạo token thất bại'
                         ];
                     }
+                    $accessToken = $this->jwtHandler->createAccessToken($user['email'], $user['role'], $user['id'], $user['FullName']);
                     return [
                         'status' => 'success',
-                        'token' => $token['token'],
+                        'token' => $accessToken,
                         'message' => 'Đăng nhập thành công'
                     ];
                 }
@@ -343,10 +365,26 @@ class ApiController {
                         }
                     }
 
-                    // Cập nhật GoogleID nếu cần (đã xử lý phía trên)
+                    // ✅ Block tất cả token cũ của user trước
+                    $googleIdForUpdate = $google_id ?? ($existingUser['GoogleID'] ?? null);
+                    if ($googleIdForUpdate) {
+                        $blockOldTokens = [
+                            [
+                                'Status' => 'Blocked',
+                                'where' => [
+                                    'google_id' => $googleIdForUpdate,
+                                    'Status' => 'Active'
+                                ]
+                            ]
+                        ];
+                        $this->modelSQL->autoUpdate('user_tokens', $blockOldTokens, 'UPDATE_WHERE');
+                    }
+
+                    // Lưu token mới với trạng thái Active
                     $insertResult = $this->modelSQL->insert('user_tokens', [
-                        'google_id' => $google_id ?? ($existingUser['GoogleID'] ?? null),
+                        'google_id' => $googleIdForUpdate,
                         'refresh_token' => $access_token,
+                        'Status' => 'Active',
                         'expires_at' => $expires_at
                     ]);
                     if (!$insertResult) {
@@ -355,16 +393,25 @@ class ApiController {
                             'message' => 'Lưu access token thất bại'
                         ];
                     }
-                    $token = $this->authController->LoginWithGoogle($google_id ?? ($existingUser['GoogleID'] ?? null));
-                    if (isset($token['error']) || !$token['token']) {
+                    $token = $this->authController->LoginWithGoogle($googleIdForUpdate);
+                    if (isset($token['error']) || !$token['refresh_token']) {
                         return [
                             'status' => 'error',
                             'message' => $token['error'] ?? 'Tạo token thất bại'
                         ];
                     }
+                    
+                    // Tạo JWT access token để trả về cho app
+                    $accessToken = $this->jwtHandler->createAccessToken(
+                        $existingUser['email'], 
+                        $existingUser['role'], 
+                        $existingUser['id'], 
+                        $existingUser['FullName']
+                    );
+                    
                     return [
                         'status' => 'success',
-                        'token' => $token['token'],
+                        'token' => $accessToken,
                         'message' => 'Đăng nhập thành công app',
                         'role' => $existingUser['role'],
                         'account_status' => $existingUser['Status'] ?? null
@@ -634,46 +681,147 @@ class ApiController {
                 ];
 
             case 'refresh_token':
-                $table = $params['table'] ?? 'user_tokens';
-                $google_id = $params['GoogleID'] ?? null;
-                if ($google_id) {
-                    $data = $this->dataController->getData($table, ['google_id' => $google_id], ['refresh_token']);
-                    if ($data) {
-                        return [
-                            'status' => 'success',
-                            'refresh_token' => $data[0]['refresh_token']
-                        ];
-                    }
+                $email = $params['email'] ?? '';
+                $currentToken = $params['current_token'] ?? null;
+                
+                    error_log("🔄 Refresh token request - Email: $email, Has current_token: " . ($currentToken ? 'yes' : 'no'));
+                
+                if (!$email) {
                     return [
                         'status' => 'error',
-                        'message' => 'Token not found or expired'
+                        'message' => 'Thiếu email'
                     ];
                 }
+                
+                // ✅ Ưu tiên: verify JWT từ app (trong body) - không check exp
+                if ($currentToken) {
+                    $tokenInfo = $this->jwtHandler->verifyTokenToGetOldMail($currentToken);
+                        error_log("🔍 Extracted email from token: " . ($tokenInfo ?? 'null') . ", Matches request email: " . ($tokenInfo === $email ? 'yes' : 'no'));
+                    
+                    if ($tokenInfo && $tokenInfo === $email) {
+                        // Lấy thông tin user từ DB
+                        $user = $this->authController->GetUserByEmail($email);
+                            error_log("👤 User from DB: " . ($user ? json_encode($user) : 'null'));
+                        
+                        if ($user) {
+                            $newToken = $this->jwtHandler->createAccessToken(
+                                $user['email'], 
+                                $user['role'], 
+                                $user['id'], 
+                                $user['FullName']
+                            );
+                                error_log("✅ Generated new token for app: " . substr($newToken, 0, 50) . "...");
+                            return [
+                                'status' => 'success',
+                                'token' => $newToken,
+                                'message' => 'Làm mới token thành công từ app'
+                            ];
+                        }
+                    }
+                }
+                
+                // ✅ Fallback: query refresh_token từ DB (cho web)
+                $tables = ['account','user_tokens'];
+                $columns = ['user_tokens.*', 'account.role', 'account.id', 'account.FullName'];
+                $join = [
+                    [
+                        'type' => 'INNER',
+                        'on' => ['account.GoogleID = user_tokens.google_id']
+                    ]
+                ];
+                $conditions = [
+                    'account.email' => $email,
+                    'user_tokens.Status' => 'Active'
+                ];
+                $result = $this->modelSQL->autoQuery($tables, $columns, $join, $conditions, []);
+                
+                $data = [];
+                if ($result instanceof mysqli_result) {
+                    while ($row = $result->fetch_assoc()) {
+                        $data[] = $row;
+                    }
+                } else {
+                    $data = $result;
+                }
+                
+                if (!empty($data)) {
+                    foreach ($data as $row) {
+                        if (isset($row['refresh_token']) && 
+                            $row['Status'] === 'Active' && 
+                            isset($row['expires_at']) && 
+                            strtotime($row['expires_at']) >= time()) {
+                            
+                            // Verify refresh_token từ DB
+                            $getInfo = $this->jwtHandler->verifyToken($row['refresh_token']);
+                            if (!$getInfo) {
+                                continue;
+                            }
+                            
+                            $newToken = $this->jwtHandler->createAccessToken(
+                                $email, 
+                                $row['role'], 
+                                $row['id'], 
+                                $row['FullName']
+                            );
+                            
+                            return [
+                                'status' => 'success',
+                                'token' => $newToken,
+                                'message' => 'Làm mới token thành công từ web'
+                            ];
+                        }
+                    }
+                }
+                
                 return [
                     'status' => 'error',
-                    'message' => 'Missing GoogleID'
+                    'message' => 'Không tìm thấy token hợp lệ hoặc đã hết hạn'
                 ];
 
             case 'logout':
-                $table = 'user_tokens';
                 $email = $params['email'] ?? null;
-                $user = $this->authController->GetUserByEmail($email);
-                $google_id = $user['GoogleID'] ?? null;
-                if ($email) {
-                    if ($this->dataController->deleteData($table, ['google_id' => $google_id])) {
-                        return [
-                            'status' => 'success',
-                            'message' => 'Đăng xuất thành công'
-                        ];
-                    }
+                
+                if (!$email) {
                     return [
                         'status' => 'error',
-                        'message' => 'Đăng xuất thất bại',
+                        'message' => 'Không tìm thấy email'
                     ];
                 }
+                
+                // Lấy thông tin user để có google_id
+                $user = $this->authController->GetUserByEmail($email);
+                $google_id = $user['GoogleID'] ?? null;
+                
+                if (!$google_id) {
+                    return [
+                        'status' => 'error',
+                        'message' => 'Không tìm thấy Google ID của tài khoản'
+                    ];
+                }
+                
+                // Sử dụng autoUpdate để block tất cả token của user
+                $dataUpdate = [
+                    [
+                        'Status' => 'Blocked',
+                        'where' => [
+                            'google_id' => $google_id
+                        ]
+                    ]
+                ];
+                
+                $result = $this->modelSQL->autoUpdate('user_tokens', $dataUpdate, 'UPDATE_WHERE');
+                
+                if ($result['status'] === 'success') {
+                    return [
+                        'status' => 'success',
+                        'message' => 'Đăng xuất thành công'
+                    ];
+                }
+                
                 return [
                     'status' => 'error',
-                    'message' => 'Không tìm thấy email'
+                    'message' => 'Đăng xuất thất bại',
+                    'details' => $result['message'] ?? 'Unknown error'
                 ];
 
             case 'autoGet':
