@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Quick Cookie Test</title>
+    <style>
+        body { font-family: monospace; padding: 20px; background: #1e1e1e; color: #d4d4d4; }
+        button { padding: 10px 20px; margin: 5px; background: #0e639c; color: white; border: none; cursor: pointer; }
+        pre { background: #2d2d2d; padding: 15px; border-radius: 5px; overflow: auto; }
+        .success { color: #4ec9b0; }
+        .error { color: #f48771; }
+    </style>
+</head>
+<body>
+    <h1>🍪 Cookie Test</h1>
+    
+    <h2>1. Set Cookie Manually</h2>
+    <button onclick="setTestCookie()">Set Test Cookie</button>
+    <button onclick="setCookie('access_token', 'test_token_123', 60)">Set access_token</button>
+    
+    <h2>2. Check Cookies</h2>
+    <button onclick="showCookies()">Show All Cookies</button>
+    <button onclick="checkSpecificCookie()">Check access_token</button>
+    
+    <h2>3. API Login Test</h2>
+    <button onclick="testAPILogin()">Test Login API</button>
+    
+    <h2>4. Delete Cookies</h2>
+    <button onclick="deleteCookie('access_token')">Delete access_token</button>
+    <button onclick="deleteAllCookies()">Delete All</button>
+    
+    <h2>Output:</h2>
+    <pre id="output"></pre>
+
+    <script>
+        function log(msg, type = 'info') {
+            const el = document.getElementById('output');
+            const time = new Date().toLocaleTimeString();
+            const cls = type === 'success' ? 'success' : (type === 'error' ? 'error' : '');
+            el.innerHTML = `<span class="${cls}">[${time}] ${msg}</span>\n\n` + el.innerHTML;
+        }
+
+        function setCookie(name, value, seconds) {
+            const expires = new Date(Date.now() + seconds * 1000).toUTCString();
+            document.cookie = `${name}=${value}; expires=${expires}; path=/; SameSite=Lax`;
+            log(`Cookie set: ${name}=${value.substring(0, 20)}... (${seconds}s)`, 'success');
+            setTimeout(showCookies, 100);
+        }
+
+        function setTestCookie() {
+            setCookie('test_cookie', 'test_value_' + Date.now(), 3600);
+        }
+
+        function showCookies() {
+            const cookies = document.cookie;
+            if (cookies) {
+                log('Current cookies:\n' + cookies.split(';').map(c => c.trim()).join('\n'), 'success');
+            } else {
+                log('No cookies found!', 'error');
+            }
+        }
+
+        function checkSpecificCookie() {
+            const cookies = document.cookie.split(';').map(c => c.trim());
+            const accessToken = cookies.find(c => c.startsWith('access_token='));
+            if (accessToken) {
+                log('Found: ' + accessToken, 'success');
+            } else {
+                log('access_token cookie NOT found', 'error');
+            }
+        }
+
+        function deleteCookie(name) {
+            document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
+            log(`Cookie deleted: ${name}`, 'success');
+            setTimeout(showCookies, 100);
+        }
+
+        function deleteAllCookies() {
+            const cookies = document.cookie.split(';');
+            cookies.forEach(cookie => {
+                const name = cookie.split('=')[0].trim();
+                deleteCookie(name);
+            });
+        }
+
+        async function testAPILogin() {
+            log('Calling login API...', 'info');
+            
+            try {
+                const response = await fetch('http://localhost:80/API_Secu/app/index.php?action=login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({
+                        email: 'test@example.com',
+                        FullName: 'Test User',
+                        GoogleID: 'test_google_123',
+                        access_token: 'dummy_token',
+                        expires_at: new Date(Date.now() + 3600000).toISOString().slice(0, 19).replace('T', ' ')
+                    })
+                });
+
+                // Log raw response text first
+                const rawText = await response.text();
+                log('Raw Response:\n' + rawText, 'info');
+
+                // Try to parse JSON
+                let result;
+                try {
+                    result = JSON.parse(rawText);
+                } catch (parseError) {
+                    log('JSON Parse Error: ' + parseError.message, 'error');
+                    log('Response was: ' + rawText.substring(0, 500), 'error');
+                    return;
+                }
+
+                log('API Response:\n' + JSON.stringify(result, null, 2), result.status === 'success' ? 'success' : 'error');
+
+                // Nếu có access_token trong response, set cookie từ JS
+                if (result.status === 'success' && result.access_token) {
+                    log('Setting cookie from JS...', 'info');
+                    setCookie('access_token', result.access_token, 60);
+                    
+                    // Lưu email vào localStorage để dùng khi refresh
+                    localStorage.setItem('user_email', 'test@example.com');
+                    log('Email saved to localStorage for refresh', 'success');
+                }
+
+                setTimeout(showCookies, 200);
+            } catch (error) {
+                log('Error: ' + error.message, 'error');
+            }
+        }
+
+        // Auto check on load
+        window.addEventListener('load', () => {
+            log('Page loaded. Checking cookies...', 'info');
+            showCookies();
+        });
+    </script>
+</body>
+</html>

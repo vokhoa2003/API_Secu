@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Auto Refresh Token Test</title>
+    <style>
+        body { 
+            font-family: 'Courier New', monospace; 
+            padding: 20px; 
+            background: #1e1e1e; 
+            color: #d4d4d4;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        .panel {
+            background: #2d2d2d;
+            border: 1px solid #3e3e3e;
+            border-radius: 8px;
+            padding: 15px;
+        }
+        h1 { color: #4ec9b0; margin-top: 0; }
+        h2 { color: #569cd6; font-size: 16px; margin-top: 0; }
+        button { 
+            padding: 10px 15px; 
+            margin: 5px 5px 5px 0; 
+            background: #0e639c; 
+            color: white; 
+            border: none; 
+            cursor: pointer;
+            border-radius: 3px;
+            font-family: monospace;
+        }
+        button:hover { background: #1177bb; }
+        button.success { background: #107c10; }
+        button.danger { background: #d13438; }
+        button:disabled { background: #555; cursor: not-allowed; }
+        pre { 
+            background: #1e1e1e; 
+            padding: 12px; 
+            border-radius: 4px; 
+            overflow: auto; 
+            max-height: 300px;
+            font-size: 12px;
+            border-left: 3px solid #569cd6;
+        }
+        .success { color: #4ec9b0; }
+        .error { color: #f48771; }
+        .warning { color: #dcdcaa; }
+        .info { color: #9cdcfe; }
+        .log-entry {
+            padding: 5px 0;
+            border-bottom: 1px solid #3e3e3e;
+        }
+        .timer {
+            font-size: 24px;
+            font-weight: bold;
+            text-align: center;
+            padding: 15px;
+            background: #1e1e1e;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .timer.warning { color: #dcdcaa; }
+        .timer.danger { color: #f48771; }
+        .status {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin: 10px 0;
+        }
+        .status-item {
+            background: #1e1e1e;
+            padding: 10px;
+            border-radius: 4px;
+            border-left: 3px solid #569cd6;
+        }
+        .status-item.active { border-left-color: #4ec9b0; }
+        .status-item.expired { border-left-color: #f48771; }
+        .status-label { font-size: 11px; color: #858585; }
+        .status-value { font-weight: bold; color: #4ec9b0; }
+    </style>
+</head>
+<body>
+    <h1>🔄 Auto Refresh Token Test</h1>
+    
+    <div class="container">
+        <!-- LEFT PANEL: CONTROLS -->
+        <div class="panel">
+            <h2>Controls</h2>
+            
+            <button onclick="testLogin()" class="success">1️⃣ Login</button>
+            <button onclick="testGetData()" id="btnGetData" disabled>2️⃣ Get Data</button>
+            <button onclick="testRefresh()" id="btnRefresh" disabled>3️⃣ Refresh Token</button>
+            <button onclick="testLogout()" id="btnLogout" disabled>4️⃣ Logout</button>
+            
+            <h3 style="margin-top: 20px;">Status:</h3>
+            <div class="status">
+                <div class="status-item">
+                    <div class="status-label">Email (localStorage)</div>
+                    <div class="status-value" id="statusEmail">-</div>
+                </div>
+                <div class="status-item">
+                    <div class="status-label">Access Token</div>
+                    <div class="status-value" id="statusToken">-</div>
+                </div>
+                <div class="status-item">
+                    <div class="status-label">Cookie Expires In</div>
+                    <div class="status-value" id="statusCookieLife">-</div>
+                </div>
+                <div class="status-item">
+                    <div class="status-label">Auto Refresh</div>
+                    <div class="status-value" id="statusAutoRefresh">OFF</div>
+                </div>
+            </div>
+
+            <h3 style="margin-top: 20px;">Timeline:</h3>
+            <div class="timer warning" id="timer">⏱️ 0s</div>
+            <p style="font-size: 12px; color: #858585;">
+                Khi cookie hết hạn (60s), auto-refresh sẽ tự động gọi refresh endpoint để lấy token mới
+            </p>
+            <button onclick="toggleAutoRefresh()" id="btnToggleAutoRefresh" class="warning" disabled>Enable Auto-Refresh</button>
+        </div>
+
+        <!-- RIGHT PANEL: LOGS -->
+        <div class="panel">
+            <h2>Logs</h2>
+            <button onclick="clearLogs()" style="float: right;">Clear</button>
+            <div style="clear: both;"></div>
+            <pre id="logs"></pre>
+        </div>
+    </div>
+
+    <script>
+        let autoRefreshEnabled = false;
+        let timerInterval = null;
+        let autoRefreshCheckInterval = null;
+        let cookieExpireTime = null;
+
+        const API_URL = 'http://localhost:80/API_Secu/app/index.php';
+
+        function log(msg, type = 'info') {
+            const el = document.getElementById('logs');
+            const time = new Date().toLocaleTimeString();
+            const cls = type;
+            const entry = `<div class="log-entry"><span class="${cls}">[${time}] ${msg}</span></div>`;
+            el.innerHTML = entry + el.innerHTML;
+        }
+
+        function clearLogs() {
+            document.getElementById('logs').innerHTML = '';
+        }
+
+        function updateStatus() {
+            // Update email
+            const email = localStorage.getItem('user_email');
+            document.getElementById('statusEmail').textContent = email ? email.substring(0, 20) + '...' : '-';
+
+            // Update token
+            const token = document.cookie.split(';').find(c => c.trim().startsWith('access_token='));
+            document.getElementById('statusToken').textContent = token ? '✓ Set' : '✗ Missing';
+
+            // Update cookie life
+            if (cookieExpireTime) {
+                const now = Date.now();
+                const remaining = Math.max(0, Math.round((cookieExpireTime - now) / 1000));
+                const status = document.getElementById('statusCookieLife');
+                status.textContent = remaining + 's';
+                if (remaining <= 10) {
+                    status.parentElement.classList.add('expired');
+                    status.parentElement.classList.remove('active');
+                } else {
+                    status.parentElement.classList.add('active');
+                    status.parentElement.classList.remove('expired');
+                }
+            } else {
+                document.getElementById('statusCookieLife').textContent = '-';
+            }
+
+            // Update auto-refresh status
+            const autoRefreshStatus = document.getElementById('statusAutoRefresh');
+            autoRefreshStatus.textContent = autoRefreshEnabled ? '✓ ON' : 'OFF';
+            autoRefreshStatus.parentElement.className = autoRefreshEnabled ? 'status-item active' : 'status-item';
+        }
+
+        function startCookieTimer() {
+            if (timerInterval) clearInterval(timerInterval);
+            
+            // Access token cookie expires in 60 seconds
+            cookieExpireTime = Date.now() + 60 * 1000;
+            
+            log('Cookie timer started (60s)', 'info');
+            
+            timerInterval = setInterval(() => {
+                const now = Date.now();
+                const remaining = Math.max(0, Math.round((cookieExpireTime - now) / 1000));
+                
+                const timerEl = document.getElementById('timer');
+                timerEl.textContent = `⏱️ ${remaining}s`;
+                
+                if (remaining <= 10) {
+                    timerEl.className = 'timer danger';
+                    if (!autoRefreshEnabled) {
+                        log('⚠️ Cookie sắp hết hạn (10s) - hãy enable auto-refresh', 'warning');
+                    }
+                } else if (remaining <= 30) {
+                    timerEl.className = 'timer warning';
+                } else {
+                    timerEl.className = 'timer';
+                }
+
+                if (remaining === 0) {
+                    clearInterval(timerInterval);
+                    log('❌ Cookie đã hết hạn!', 'error');
+                    document.getElementById('btnToggleAutoRefresh').disabled = true;
+                }
+
+                updateStatus();
+            }, 1000);
+        }
+
+        function toggleAutoRefresh() {
+            autoRefreshEnabled = !autoRefreshEnabled;
+            const btn = document.getElementById('btnToggleAutoRefresh');
+            
+            if (autoRefreshEnabled) {
+                btn.textContent = 'Disable Auto-Refresh';
+                btn.className = 'success';
+                log('✓ Auto-refresh ENABLED', 'success');
+                startAutoRefreshCheck();
+            } else {
+                btn.textContent = 'Enable Auto-Refresh';
+                btn.className = 'warning';
+                if (autoRefreshCheckInterval) clearInterval(autoRefreshCheckInterval);
+                log('✗ Auto-refresh DISABLED', 'warning');
+            }
+            updateStatus();
+        }
+
+        function startAutoRefreshCheck() {
+            if (autoRefreshCheckInterval) clearInterval(autoRefreshCheckInterval);
+            
+            // Check every 2 seconds if cookie is expiring soon
+            autoRefreshCheckInterval = setInterval(async () => {
+                if (!autoRefreshEnabled) return;
+                
+                const remaining = Math.max(0, Math.round((cookieExpireTime - Date.now()) / 1000));
+                
+                // Khi cookie còn 10s, tự động refresh
+                if (remaining <= 10 && remaining > 0) {
+                    log(`⚡ Auto-refreshing token (${remaining}s remaining)...`, 'warning');
+                    await testRefresh();
+                } else if (remaining === 0) {
+                    log('❌ Cookie expired, auto-refresh failed - please login again', 'error');
+                    clearInterval(autoRefreshCheckInterval);
+                }
+            }, 2000);
+        }
+
+        async function testLogin() {
+            log('📝 Login API called...', 'info');
+            
+            try {
+                const response = await fetch(API_URL + '?action=login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({
+                        email: 'vophamdangkhoa.010103@gmail.com',
+                        FullName: 'Khoa Test',
+                        GoogleID: '111186508142808754018',
+                        access_token: 'dummy_google_token',
+                        expires_at: new Date(Date.now() + 3600000).toISOString().slice(0, 19).replace('T', ' ')
+                    })
+                });
+
+                const rawText = await response.text();
+                let result;
+                try {
+                    result = JSON.parse(rawText);
+                } catch (parseError) {
+                    log('❌ JSON Parse Error: ' + parseError.message, 'error');
+                    log('Response: ' + rawText.substring(0, 200), 'error');
+                    return;
+                }
+
+                if (result.status === 'success') {
+                    log('✓ Login successful', 'success');
+                    log('Access Token: ' + result.access_token.substring(0, 30) + '...', 'success');
+                    
+                    // IMPORTANT: Save email to localStorage (from response)
+                    const email = result.email || 'vophamdangkhoa.010103@gmail.com';
+                    localStorage.setItem('user_email', email);
+                    log('✓ Email saved to localStorage: ' + email, 'success');
+                    
+                    // Start cookie timer
+                    startCookieTimer();
+                    
+                    // Enable buttons
+                    document.getElementById('btnGetData').disabled = false;
+                    document.getElementById('btnRefresh').disabled = false;
+                    document.getElementById('btnLogout').disabled = false;
+                    document.getElementById('btnToggleAutoRefresh').disabled = false;
+                    
+                    updateStatus();
+                } else {
+                    log('❌ Login failed: ' + (result.message || 'Unknown error'), 'error');
+                }
+            } catch (error) {
+                log('❌ Error: ' + error.message, 'error');
+            }
+        }
+
+        async function testGetData() {
+            log('📊 Getting data...', 'info');
+            
+            try {
+                const response = await fetch(API_URL + '?action=get', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({
+                        table: 'account',
+                        scope: 'self'
+                    })
+                });
+
+                const result = await response.json();
+                if (result.status === 'success' || Array.isArray(result)) {
+                    log('✓ Data retrieved: ' + JSON.stringify(result).substring(0, 100) + '...', 'success');
+                } else if (result.error) {
+                    log('❌ Error: ' + result.error, 'error');
+                } else {
+                    log('✓ Data: ' + JSON.stringify(result).substring(0, 100), 'success');
+                }
+            } catch (error) {
+                log('❌ Error: ' + error.message, 'error');
+            }
+        }
+
+        async function testRefresh() {
+            const email = localStorage.getItem('user_email');
+            if (!email) {
+                log('❌ No email in localStorage, cannot refresh', 'error');
+                return;
+            }
+
+            log('🔄 Refresh token API called...', 'info');
+            
+            try {
+                const response = await fetch(API_URL + '?action=refresh_token', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ email: email })
+                });
+
+                const rawText = await response.text();
+                let result;
+                try {
+                    result = JSON.parse(rawText);
+                } catch (parseError) {
+                    log('❌ JSON Parse Error in refresh: ' + parseError.message, 'error');
+                    return;
+                }
+
+                if (result.status === 'success' && result.access_token) {
+                    log('✓ Token refreshed successfully', 'success');
+                    log('New Token: ' + result.access_token.substring(0, 30) + '...', 'success');
+                    
+                    // IMPORTANT: Set cookie từ response (vì setcookie() server-side không hoạt động)
+                    // Dùng document.cookie trực tiếp
+                    const expires = new Date(Date.now() + 60 * 1000).toUTCString();
+                    document.cookie = `access_token=${result.access_token}; expires=${expires}; path=/; SameSite=Lax`;
+                    log('✓ Cookie set from JS', 'success');
+                    
+                    // Restart cookie timer (new 60s)
+                    startCookieTimer();
+                    
+                    // Update status
+                    updateStatus();
+                } else {
+                    log('❌ Refresh failed: ' + (result.message || result.error || 'Unknown error'), 'error');
+                }
+            } catch (error) {
+                log('❌ Error: ' + error.message, 'error');
+            }
+        }
+
+        async function testLogout() {
+            log('🚪 Logout API called...', 'info');
+            
+            try {
+                const response = await fetch(API_URL + '?action=logout', {
+                    method: 'POST',
+                    credentials: 'include'
+                });
+
+                const result = await response.json();
+                if (result.status === 'success') {
+                    log('✓ Logout successful', 'success');
+                    
+                    // Clear localStorage
+                    localStorage.removeItem('user_email');
+                    
+                    // Clear timers
+                    if (timerInterval) clearInterval(timerInterval);
+                    if (autoRefreshCheckInterval) clearInterval(autoRefreshCheckInterval);
+                    
+                    // Disable buttons
+                    document.getElementById('btnGetData').disabled = true;
+                    document.getElementById('btnRefresh').disabled = true;
+                    document.getElementById('btnLogout').disabled = true;
+                    document.getElementById('btnToggleAutoRefresh').disabled = true;
+                    autoRefreshEnabled = false;
+                    
+                    // Reset status
+                    document.getElementById('timer').textContent = '⏱️ 0s';
+                    updateStatus();
+                } else {
+                    log('❌ Logout failed: ' + (result.message || 'Unknown error'), 'error');
+                }
+            } catch (error) {
+                log('❌ Error: ' + error.message, 'error');
+            }
+        }
+
+        // Initial update
+        window.addEventListener('load', () => {
+            updateStatus();
+        });
+    </script>
+</body>
+</html>

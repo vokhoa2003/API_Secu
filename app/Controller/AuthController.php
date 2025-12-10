@@ -13,39 +13,43 @@ class AuthController{
     public function LoginWithGoogle($googleId){
 
         if(!isset($googleId) || empty($googleId)){
-            // http_response_code(400);
-            // echo json_encode(array("error" => "Missing google_id"));
-            // exit;
             return ["error" => "Missing google_id"];
             exit;
         }
-        // $googleId = $_POST["google_id"];
+        
         $user = $this->GetUserIdByGoogleId($googleId);
         
         if(!$user){
             http_response_code(401);
-            // echo json_encode(array("error" => "User not found"));
             return ["error" => "User not found"];
             exit;
         }
-        //print_r($user_id);
-        //$jwtHanlder = new JwtHandler;
+        
         if(isset($user['Status']) && $user['Status'] == 'Blocked'){
             http_response_code(401);
-            // echo json_encode(array("error" => "User is inactive"));
             return ["error" => "User is inactive"];
             exit;
         }
-        $token = $this->jwtHandler->createToken($user['email'], $user['role'], $user['id'], $user['FullName']);
-        error_log("Generated token: " . ($token ?? 'Null'));
-        // json_encode(array("token" => $token));
-        if(!isset($token) || empty($token)){
+        
+        // Tạo access token (1 phút) và refresh token (1 giờ)
+        $accessToken = $this->jwtHandler->createAccessToken($user['email'], $user['role'], $user['id'], $user['FullName']);
+        $refreshToken = $this->jwtHandler->createRefreshToken($user['email'], $user['role'], $user['id'], $user['FullName']);
+        
+        error_log("Generated access token: " . ($accessToken ?? 'Null'));
+        error_log("Generated refresh token: " . ($refreshToken ?? 'Null'));
+        
+        if(!isset($accessToken) || empty($accessToken) || !isset($refreshToken) || empty($refreshToken)){
             http_response_code(500);
             return ["error" => "Token generation failed"];
             exit;
         }
-        return ["status" => "success", "token" => $token];
         
+        return [
+            "status" => "success", 
+            "access_token" => $accessToken,
+            "refresh_token" => $refreshToken,
+            "user" => $user
+        ];
     }
     public function GetUserIdByGoogleId($google_id, $table = 'account') {
         // Có thể truyền bảng từ ApiController

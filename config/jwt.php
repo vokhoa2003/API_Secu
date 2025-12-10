@@ -4,5 +4,6 @@ return [
     'algorithm' => 'HS256',                   // 🔐 Thuật toán mã hóa JWT
     'issuer' => 'API_Secret',              // 🏷️ Tên ứng dụng của bạn
     'audience' => 'user',           // 👥 Đối tượng sử dụng JWT
-    'expiration_time' => 3600,                // ⏳ Thời gian hết hạn (1 giờ)
+    'access_token_expiration' => 60,          // ⏳ Access token hết hạn sau 1 phút
+    'refresh_token_expiration' => 3600,       // ⏳ Refresh token hết hạn sau 1 giờ
 ];

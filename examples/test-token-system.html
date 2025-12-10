@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Token System Test Page</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        h1, h2 {
+            color: #333;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+            font-size: 14px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        button.danger {
+            background-color: #f44336;
+        }
+        button.danger:hover {
+            background-color: #da190b;
+        }
+        .output {
+            background-color: #f9f9f9;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 15px;
+            margin-top: 10px;
+            max-height: 400px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 10px;
+        }
+        .status.success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .status.info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        input, select {
+            padding: 8px;
+            margin: 5px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            width: 200px;
+        }
+        .form-group {
+            margin: 10px 0;
+        }
+        label {
+            display: inline-block;
+            width: 150px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔐 Token System Test Page</h1>
+    
+    <div class="container">
+        <h2>Token Status</h2>
+        <div id="tokenStatus" class="status info">
+            Chưa kiểm tra token
+        </div>
+        <button onclick="checkTokenStatus()">🔍 Kiểm tra Token</button>
+        <button onclick="showCookies()">🍪 Xem Cookies</button>
+    </div>
+
+    <div class="container">
+        <h2>1. Login (Test)</h2>
+        <div class="form-group">
+            <label>Email:</label>
+            <input type="email" id="loginEmail" value="test@example.com">
+        </div>
+        <div class="form-group">
+            <label>Full Name:</label>
+            <input type="text" id="loginName" value="Test User">
+        </div>
+        <div class="form-group">
+            <label>Google ID:</label>
+            <input type="text" id="loginGoogleId" value="test_google_id_123">
+        </div>
+        <button onclick="testLogin()">🔑 Login</button>
+        <div id="loginOutput" class="output"></div>
+    </div>
+
+    <div class="container">
+        <h2>2. Get Data (Protected)</h2>
+        <div class="form-group">
+            <label>Table:</label>
+            <select id="getTable">
+                <option value="account">account</option>
+                <option value="student">student</option>
+                <option value="teacher">teacher</option>
+                <option value="classes">classes</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Scope:</label>
+            <select id="getScope">
+                <option value="self">self</option>
+                <option value="all">all</option>
+            </select>
+        </div>
+        <button onclick="testGetData()">📊 Get Data</button>
+        <div id="getOutput" class="output"></div>
+    </div>
+
+    <div class="container">
+        <h2>3. Refresh Token</h2>
+        <p>Chờ 60 giây để access token hết hạn, sau đó test refresh token</p>
+        <button onclick="testRefreshToken()">🔄 Refresh Token</button>
+        <button onclick="waitAndRefresh()">⏱️ Đợi 60s và Refresh</button>
+        <div id="refreshOutput" class="output"></div>
+    </div>
+
+    <div class="container">
+        <h2>4. Logout</h2>
+        <button onclick="testLogout()" class="danger">🚪 Logout</button>
+        <div id="logoutOutput" class="output"></div>
+    </div>
+
+    <div class="container">
+        <h2>5. Auto Test Sequence</h2>
+        <p>Tự động test toàn bộ flow: Login → Get Data → Wait → Refresh → Get Data → Logout</p>
+        <button onclick="runAutoTest()">🤖 Chạy Auto Test</button>
+        <div id="autoTestOutput" class="output"></div>
+    </div>
+
+    <script src="api-client.js"></script>
+    <script>
+        // Helper function to display output
+        function displayOutput(elementId, data, isError = false) {
+            const element = document.getElementById(elementId);
+            const timestamp = new Date().toLocaleTimeString();
+            const output = `[${timestamp}] ${isError ? '❌ ERROR' : '✅ SUCCESS'}:\n${JSON.stringify(data, null, 2)}\n\n`;
+            element.textContent = output + element.textContent;
+        }
+
+        // Check token status
+        async function checkTokenStatus() {
+            const statusDiv = document.getElementById('tokenStatus');
+            try {
+                const result = await apiClient.getData('account', 'self');
+                if (result && !result.error) {
+                    statusDiv.className = 'status success';
+                    statusDiv.textContent = '✅ Token hợp lệ - Đã đăng nhập';
+                } else {
+                    statusDiv.className = 'status error';
+                    statusDiv.textContent = '❌ Token không hợp lệ hoặc đã hết hạn';
+                }
+            } catch (error) {
+                statusDiv.className = 'status error';
+                statusDiv.textContent = '❌ Chưa đăng nhập hoặc token đã hết hạn';
+            }
+        }
+
+        // Show cookies
+        function showCookies() {
+            const cookies = document.cookie.split(';').map(c => c.trim());
+            alert('Cookies:\n' + cookies.join('\n'));
+        }
+
+        // Test Login
+        async function testLogin() {
+            const email = document.getElementById('loginEmail').value;
+            const name = document.getElementById('loginName').value;
+            const googleId = document.getElementById('loginGoogleId').value;
+
+            try {
+                // Giả lập expires_at 1 giờ từ bây giờ
+                const expiresAt = new Date(Date.now() + 3600000).toISOString().slice(0, 19).replace('T', ' ');
+                
+                const result = await apiClient.login(
+                    email,
+                    name,
+                    googleId,
+                    'dummy_google_token',
+                    expiresAt
+                );
+                
+                displayOutput('loginOutput', result);
+                checkTokenStatus();
+            } catch (error) {
+                displayOutput('loginOutput', { error: error.message }, true);
+            }
+        }
+
+        // Test Get Data
+        async function testGetData() {
+            const table = document.getElementById('getTable').value;
+            const scope = document.getElementById('getScope').value;
+
+            try {
+                const result = await apiClient.getData(table, scope);
+                displayOutput('getOutput', result);
+            } catch (error) {
+                displayOutput('getOutput', { error: error.message }, true);
+            }
+        }
+
+        // Test Refresh Token
+        async function testRefreshToken() {
+            try {
+                const result = await apiClient.refreshAccessToken();
+                displayOutput('refreshOutput', { 
+                    success: result, 
+                    message: result ? 'Token refreshed successfully' : 'Failed to refresh token' 
+                });
+                checkTokenStatus();
+            } catch (error) {
+                displayOutput('refreshOutput', { error: error.message }, true);
+            }
+        }
+
+        // Wait and Refresh
+        async function waitAndRefresh() {
+            displayOutput('refreshOutput', { message: 'Đang đợi 60 giây...' });
+            
+            let countdown = 60;
+            const countdownInterval = setInterval(() => {
+                displayOutput('refreshOutput', { message: `Còn ${countdown} giây...` });
+                countdown--;
+                
+                if (countdown < 0) {
+                    clearInterval(countdownInterval);
+                }
+            }, 1000);
+
+            setTimeout(async () => {
+                displayOutput('refreshOutput', { message: 'Access token đã hết hạn, đang refresh...' });
+                await testRefreshToken();
+            }, 61000); // 61 seconds to ensure token expired
+        }
+
+        // Test Logout
+        async function testLogout() {
+            try {
+                await apiClient.logout();
+                displayOutput('logoutOutput', { message: 'Logged out successfully' });
+                checkTokenStatus();
+            } catch (error) {
+                displayOutput('logoutOutput', { error: error.message }, true);
+            }
+        }
+
+        // Auto Test Sequence
+        async function runAutoTest() {
+            const output = document.getElementById('autoTestOutput');
+            output.textContent = '';
+
+            try {
+                // Step 1: Login
+                displayOutput('autoTestOutput', { step: 1, action: 'Login...' });
+                await testLogin();
+                await sleep(2000);
+
+                // Step 2: Get Data
+                displayOutput('autoTestOutput', { step: 2, action: 'Get Account Data...' });
+                document.getElementById('getTable').value = 'account';
+                document.getElementById('getScope').value = 'self';
+                await testGetData();
+                await sleep(2000);
+
+                // Step 3: Wait for token to expire
+                displayOutput('autoTestOutput', { step: 3, action: 'Đợi 65 giây để token hết hạn...' });
+                for (let i = 65; i > 0; i--) {
+                    displayOutput('autoTestOutput', { countdown: `${i} giây...` });
+                    await sleep(1000);
+                }
+
+                // Step 4: Try to get data (should trigger refresh)
+                displayOutput('autoTestOutput', { step: 4, action: 'Get Data (sẽ tự động refresh token)...' });
+                await testGetData();
+                await sleep(2000);
+
+                // Step 5: Logout
+                displayOutput('autoTestOutput', { step: 5, action: 'Logout...' });
+                await testLogout();
+
+                displayOutput('autoTestOutput', { message: '✅ Auto test hoàn tất!' });
+            } catch (error) {
+                displayOutput('autoTestOutput', { error: error.message }, true);
+            }
+        }
+
+        function sleep(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
+        // Auto check on load
+        window.addEventListener('load', () => {
+            checkTokenStatus();
+        });
+    </script>
+</body>
+</html>

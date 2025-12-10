@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Token System</title>
+    <style>
+        body { font-family: monospace; padding: 20px; background: #1e1e1e; color: #d4d4d4; }
+        .section { background: #2d2d2d; padding: 15px; margin: 10px 0; border-radius: 5px; }
+        button { padding: 10px 20px; margin: 5px; cursor: pointer; background: #0e639c; color: white; border: none; border-radius: 3px; }
+        button:hover { background: #1177bb; }
+        .success { color: #4ec9b0; }
+        .error { color: #f48771; }
+        .info { color: #9cdcfe; }
+        pre { background: #1e1e1e; padding: 10px; border-radius: 3px; overflow-x: auto; }
+        input { padding: 8px; margin: 5px; width: 300px; background: #3c3c3c; color: #d4d4d4; border: 1px solid #555; border-radius: 3px; }
+    </style>
+</head>
+<body>
+    <h1>🔍 Debug Token System</h1>
+    
+    <div class="section">
+        <h2>1. Check Database Connection</h2>
+        <button onclick="checkDB()">Check DB</button>
+        <pre id="dbResult"></pre>
+    </div>
+
+    <div class="section">
+        <h2>2. Login Test</h2>
+        <input type="email" id="loginEmail" placeholder="Email" value="test@example.com"><br>
+        <input type="text" id="loginName" placeholder="Full Name" value="Test User"><br>
+        <input type="text" id="loginGoogleId" placeholder="Google ID" value="test_google_123"><br>
+        <button onclick="testLogin()">Login</button>
+        <pre id="loginResult"></pre>
+    </div>
+
+    <div class="section">
+        <h2>3. Check Cookies</h2>
+        <button onclick="showCookies()">Show Cookies</button>
+        <pre id="cookiesResult"></pre>
+    </div>
+
+    <div class="section">
+        <h2>4. Check Token in DB</h2>
+        <input type="text" id="checkGoogleId" placeholder="Google ID" value="test_google_123"><br>
+        <button onclick="checkTokenInDB()">Check Token</button>
+        <pre id="tokenDbResult"></pre>
+    </div>
+
+    <div class="section">
+        <h2>5. Get Account Data (Protected)</h2>
+        <button onclick="getAccountData()">Get Account</button>
+        <pre id="accountResult"></pre>
+    </div>
+
+    <div class="section">
+        <h2>6. Wait & Refresh Token</h2>
+        <button onclick="waitAndRefresh(65)">Wait 65s & Refresh</button>
+        <button onclick="forceRefresh()">Force Refresh Now</button>
+        <pre id="refreshResult"></pre>
+    </div>
+
+    <div class="section">
+        <h2>7. Logout</h2>
+        <button onclick="testLogout()">Logout</button>
+        <pre id="logoutResult"></pre>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:80/API_Secu/app/index.php';
+
+        function log(elementId, message, type = 'info') {
+            const el = document.getElementById(elementId);
+            const timestamp = new Date().toLocaleTimeString();
+            const className = type === 'error' ? 'error' : (type === 'success' ? 'success' : 'info');
+            el.innerHTML = `<span class="${className}">[${timestamp}] ${message}</span>`;
+        }
+
+        async function apiCall(action, data = {}) {
+            try {
+                const response = await fetch(`${API_BASE}?action=${action}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await response.json();
+                return { status: response.status, data: result };
+            } catch (error) {
+                return { status: 0, data: { error: error.message } };
+            }
+        }
+
+        async function checkDB() {
+            log('dbResult', 'Checking database connection...', 'info');
+            const result = await apiCall('get', { table: 'account', scope: 'all' });
+            log('dbResult', JSON.stringify(result, null, 2), result.status === 200 ? 'success' : 'error');
+        }
+
+        async function testLogin() {
+            const email = document.getElementById('loginEmail').value;
+            const name = document.getElementById('loginName').value;
+            const googleId = document.getElementById('loginGoogleId').value;
+
+            log('loginResult', 'Logging in...', 'info');
+            
+            const data = {
+                email: email,
+                FullName: name,
+                GoogleID: googleId,
+                access_token: 'dummy_google_token',
+                expires_at: new Date(Date.now() + 3600000).toISOString().slice(0, 19).replace('T', ' ')
+            };
+
+            const result = await apiCall('login', data);
+            
+            // Nếu server không set cookie được, set từ JS
+            if (result.data.status === 'success' && result.data.access_token) {
+                document.cookie = `access_token=${result.data.access_token}; path=/; max-age=60; SameSite=Lax`;
+                // Lưu email vào localStorage để dùng khi refresh token
+                localStorage.setItem('user_email', email);
+                log('loginResult', 'Login successful!\nCookie set & email saved to localStorage\n\n' + JSON.stringify(result, null, 2), 'success');
+            } else {
+                log('loginResult', JSON.stringify(result, null, 2), result.data.status === 'success' ? 'success' : 'error');
+            }
+            
+            setTimeout(showCookies, 100);
+        }
+
+        function showCookies() {
+            const cookies = document.cookie.split(';').map(c => c.trim()).join('\n');
+            log('cookiesResult', cookies || 'No cookies found', cookies ? 'success' : 'error');
+        }
+
+        async function checkTokenInDB() {
+            const googleId = document.getElementById('checkGoogleId').value;
+            log('tokenDbResult', 'Checking user_tokens table...', 'info');
+            
+            // Note: Cần admin token để query user_tokens
+            const result = await apiCall('get', { 
+                table: 'user_tokens', 
+                scope: 'all',
+                google_id: googleId 
+            });
+            
+            log('tokenDbResult', JSON.stringify(result, null, 2), result.status === 200 ? 'success' : 'error');
+        }
+
+        async function getAccountData() {
+            log('accountResult', 'Getting account data...', 'info');
+            const result = await apiCall('get', { table: 'account', scope: 'self' });
+            log('accountResult', JSON.stringify(result, null, 2), result.data.status !== 'error' ? 'success' : 'error');
+        }
+
+        async function forceRefresh() {
+            log('refreshResult', 'Forcing token refresh...', 'info');
+            
+            // Lấy email từ localStorage (nếu user đã login)
+            const userEmail = localStorage.getItem('user_email');
+            
+            const result = await apiCall('refresh_token', { email: userEmail });
+            
+            // Set cookie từ JS nếu server trả về token
+            if (result.data.status === 'success' && result.data.access_token) {
+                document.cookie = `access_token=${result.data.access_token}; path=/; max-age=60; SameSite=Lax`;
+                log('refreshResult', 'Token refreshed & cookie updated\n\n' + JSON.stringify(result, null, 2), 'success');
+            } else {
+                log('refreshResult', JSON.stringify(result, null, 2), result.data.status === 'success' ? 'success' : 'error');
+            }
+            
+            setTimeout(showCookies, 100);
+        }
+
+        async function waitAndRefresh(seconds) {
+            let countdown = seconds;
+            const interval = setInterval(() => {
+                log('refreshResult', `Waiting ${countdown}s for token to expire...`, 'info');
+                countdown--;
+                if (countdown < 0) {
+                    clearInterval(interval);
+                    forceRefresh();
+                }
+            }, 1000);
+        }
+
+        async function testLogout() {
+            log('logoutResult', 'Logging out...', 'info');
+            const result = await apiCall('logout', {});
+            log('logoutResult', JSON.stringify(result, null, 2), result.data.status === 'success' ? 'success' : 'error');
+        }
+
+        // Auto check cookies on load
+        window.addEventListener('load', showCookies);
+    </script>
+</body>
+</html>

@@ -130,7 +130,7 @@ class ApiController {
         //Chỉ xác thực token với các action cần bảo vệ
         $actionsRequireAuth = ['get', 'update', 'delete', 'logout', 'refresh_token', 'autoGet', 'autoUpdate', 'AdminUpdate', 'muitiInsert'];
         if (in_array($action, $actionsRequireAuth)) {
-            $middlewareResult = AuthMiddleware::verifyRequest($action);
+            $middlewareResult = AuthMiddleware::verifyRequest($action, $params);
             if (isset($middlewareResult['error'])) {
                 http_response_code(401);
                 return [
@@ -230,31 +230,62 @@ class ApiController {
                         }
                     }
 
-                    // Lưu token (refresh_token)
+                    // Tạo tokens
+                    $finalGoogleId = $google_id ?? ($user['GoogleID'] ?? null);
+                    error_log("LOGIN: Creating tokens for GoogleID: " . ($finalGoogleId ?? 'NULL'));
+                    
+                    $tokenResult = $this->authController->LoginWithGoogle($finalGoogleId);
+                    if (isset($tokenResult['error'])) {
+                        return [
+                            'status' => 'error',
+                            'message' => $tokenResult['error'] ?? 'Tạo token thất bại'
+                        ];
+                    }
+                    
+                    // Lưu refresh token vào database với trạng thái Active và hạn 1 giờ
+                    $refreshTokenExpiry = date('Y-m-d H:i:s', time() + 3600); // 1 giờ
+                    
+                    error_log("LOGIN: Deleting old token for GoogleID: " . $finalGoogleId);
+                    // Xóa token cũ nếu có
+                    $this->modelSQL->delete('user_tokens', ['google_id' => $finalGoogleId]);
+                    
+                    error_log("LOGIN: Inserting new refresh token for GoogleID: " . $finalGoogleId);
+                    // Lưu refresh token mới
                     $insertResult = $this->modelSQL->insert('user_tokens', [
-                        'google_id' => $google_id ?? ($user['GoogleID'] ?? null),
-                        'refresh_token' => $access_token,
-                        'expires_at' => $expires_at
+                        'google_id' => $finalGoogleId,
+                        'refresh_token' => $tokenResult['refresh_token'],
+                        'Status' => 'Active',
+                        'expires_at' => $refreshTokenExpiry
                     ]);
+                    
+                    error_log("LOGIN: Insert result: " . ($insertResult ? 'SUCCESS' : 'FAILED'));
 
                     if (!$insertResult) {
                         return [
                             'status' => 'error',
-                            'message' => 'Lưu access token thất bại'
+                            'message' => 'Lưu refresh token thất bại'
                         ];
                     }
-
-                    $token = $this->authController->LoginWithGoogle($google_id ?? ($user['GoogleID'] ?? null));
-                    if (isset($token['error']) || !$token['token']) {
-                        return [
-                            'status' => 'error',
-                            'message' => $token['error'] ?? 'Tạo token thất bại'
-                        ];
-                    }
+                    
+                    // Đặt access token vào cookie (hạn 1 phút)
+                    $cookieSet = setcookie('access_token', $tokenResult['access_token'], [
+                        'expires' => time() + 60, // 1 phút
+                        'path' => '/',
+                        'httponly' => false, // Cho phép JS đọc để debug
+                        'samesite' => 'Lax', // Lax thay vì Strict để cross-site hoạt động
+                        'secure' => false // false cho localhost HTTP
+                    ]);
+                    
+                    error_log("LOGIN: Cookie set result: " . ($cookieSet ? 'SUCCESS' : 'FAILED'));
+                    error_log("LOGIN: Access token: " . substr($tokenResult['access_token'], 0, 50) . '...');
+                    
                     return [
                         'status' => 'success',
-                        'token' => $token['token'],
-                        'message' => 'Đăng nhập thành công'
+                        'message' => 'Đăng nhập thành công',
+                        'email' => $email,
+                        'access_token' => $tokenResult['access_token'],
+                        'refresh_token' => $tokenResult['refresh_token'],
+                        'cookie_set' => $cookieSet
                     ];
                 }
                 return [
@@ -343,31 +374,62 @@ class ApiController {
                         }
                     }
 
-                    // Cập nhật GoogleID nếu cần (đã xử lý phía trên)
+                    // Tạo tokens
+                    $finalGoogleId = $google_id ?? ($existingUser['GoogleID'] ?? null);
+                    error_log("APP_LOGIN: Creating tokens for GoogleID: " . ($finalGoogleId ?? 'NULL'));
+                    
+                    $tokenResult = $this->authController->LoginWithGoogle($finalGoogleId);
+                    if (isset($tokenResult['error'])) {
+                        return [
+                            'status' => 'error',
+                            'message' => $tokenResult['error'] ?? 'Tạo token thất bại'
+                        ];
+                    }
+                    
+                    // Lưu refresh token vào database với trạng thái Active và hạn 1 giờ
+                    $refreshTokenExpiry = date('Y-m-d H:i:s', time() + 3600); // 1 giờ
+                    
+                    error_log("APP_LOGIN: Deleting old token for GoogleID: " . $finalGoogleId);
+                    // Xóa token cũ nếu có
+                    $this->modelSQL->delete('user_tokens', ['google_id' => $finalGoogleId]);
+                    
+                    error_log("APP_LOGIN: Inserting new refresh token for GoogleID: " . $finalGoogleId);
+                    // Lưu refresh token mới
                     $insertResult = $this->modelSQL->insert('user_tokens', [
-                        'google_id' => $google_id ?? ($existingUser['GoogleID'] ?? null),
-                        'refresh_token' => $access_token,
-                        'expires_at' => $expires_at
+                        'google_id' => $finalGoogleId,
+                        'refresh_token' => $tokenResult['refresh_token'],
+                        'Status' => 'Active',
+                        'expires_at' => $refreshTokenExpiry
                     ]);
+                    
+                    error_log("APP_LOGIN: Insert result: " . ($insertResult ? 'SUCCESS' : 'FAILED'));
+                    
                     if (!$insertResult) {
                         return [
                             'status' => 'error',
-                            'message' => 'Lưu access token thất bại'
+                            'message' => 'Lưu refresh token thất bại'
                         ];
                     }
-                    $token = $this->authController->LoginWithGoogle($google_id ?? ($existingUser['GoogleID'] ?? null));
-                    if (isset($token['error']) || !$token['token']) {
-                        return [
-                            'status' => 'error',
-                            'message' => $token['error'] ?? 'Tạo token thất bại'
-                        ];
-                    }
+                    
+                    // Đặt access token vào cookie (hạn 1 phút)
+                    $cookieSet = setcookie('access_token', $tokenResult['access_token'], [
+                        'expires' => time() + 60, // 1 phút
+                        'path' => '/',
+                        'httponly' => false, // Cho phép JS đọc
+                        'samesite' => 'Lax',
+                        'secure' => false
+                    ]);
+                    
+                    error_log("APP_LOGIN: Cookie set result: " . ($cookieSet ? 'SUCCESS' : 'FAILED'));
+                    
                     return [
                         'status' => 'success',
-                        'token' => $token['token'],
                         'message' => 'Đăng nhập thành công app',
+                        'access_token' => $tokenResult['access_token'],
+                        'refresh_token' => $tokenResult['refresh_token'],
                         'role' => $existingUser['role'],
-                        'account_status' => $existingUser['Status'] ?? null
+                        'account_status' => $existingUser['Status'] ?? null,
+                        'cookie_set' => $cookieSet
                     ];
                 }
                 return [
@@ -633,25 +695,125 @@ class ApiController {
                     'message' => 'Thiếu điều kiện'
                 ];
 
+
             case 'refresh_token':
-                $table = $params['table'] ?? 'user_tokens';
-                $google_id = $params['GoogleID'] ?? null;
-                if ($google_id) {
-                    $data = $this->dataController->getData($table, ['google_id' => $google_id], ['refresh_token']);
-                    if ($data) {
-                        return [
-                            'status' => 'success',
-                            'refresh_token' => $data[0]['refresh_token']
-                        ];
-                    }
+                // Lấy email từ params (có thể gửi từ client hoặc middleware)
+                // Ưu tiên từ middleware (params), rồi mới từ body/localStorage
+                $email = $params['email'] ?? null;
+                
+                error_log("REFRESH_TOKEN: Email from params: " . ($email ?? 'NULL'));
+                
+                // Nếu middleware không truyền email (token đã hết hạn), báo lỗi
+                // Client cần lấy email từ localStorage và gửi lên
+                if (!$email) {
+                    http_response_code(401);
                     return [
                         'status' => 'error',
-                        'message' => 'Token not found or expired'
+                        'message' => 'Email không hợp lệ. Vui lòng gửi email trong request body',
+                        'hint' => 'Gửi { "email": "user@example.com" } khi access token hết hạn',
+                        'debug' => ['params' => $params]
                     ];
                 }
+                
+                // Lấy thông tin user từ email
+                $user = $this->authController->GetUserByEmail($email);
+                error_log("REFRESH_TOKEN: User from email: " . print_r($user, true));
+                
+                if (!$user) {
+                    http_response_code(401);
+                    return [
+                        'status' => 'error',
+                        'message' => 'Người dùng không tồn tại',
+                        'debug' => ['email' => $email]
+                    ];
+                }
+                
+                $google_id = $user['GoogleID'] ?? null;
+                error_log("REFRESH_TOKEN: GoogleID: " . ($google_id ?? 'NULL'));
+                
+                if (!$google_id) {
+                    http_response_code(401);
+                    return [
+                        'status' => 'error',
+                        'message' => 'GoogleID không tồn tại',
+                        'debug' => ['user' => $user]
+                    ];
+                }
+                
+                // Lấy refresh token từ database
+                error_log("REFRESH_TOKEN: Querying user_tokens with google_id: " . $google_id);
+                $tokenRecord = $this->dataController->getData('user_tokens', ['google_id' => $google_id]);
+                error_log("REFRESH_TOKEN: Token record: " . print_r($tokenRecord, true));
+                
+                if (!$tokenRecord || empty($tokenRecord)) {
+                    http_response_code(401);
+                    return [
+                        'status' => 'error',
+                        'message' => 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.'
+                    ];
+                }
+                
+                $tokenData = $tokenRecord[0];
+                
+                // Kiểm tra trạng thái token
+                if ($tokenData['Status'] !== 'Active') {
+                    http_response_code(401);
+                    return [
+                        'status' => 'error',
+                        'message' => 'Phiên đăng nhập đã bị khóa. Vui lòng đăng nhập lại.'
+                    ];
+                }
+                
+                // Kiểm tra thời gian hết hạn của refresh token
+                $expiresAt = strtotime($tokenData['expires_at']);
+                if ($expiresAt < time()) {
+                    // Refresh token đã hết hạn - xóa khỏi database
+                    $this->modelSQL->delete('user_tokens', ['google_id' => $google_id]);
+                    http_response_code(401);
+                    return [
+                        'status' => 'error',
+                        'message' => 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.'
+                    ];
+                }
+                
+                // Verify refresh token
+                $jwtHandler = new JwtHandler();
+                $refreshTokenData = $jwtHandler->verifyToken($tokenData['refresh_token']);
+                
+                if (!$refreshTokenData) {
+                    // Refresh token không hợp lệ - xóa khỏi database
+                    $this->modelSQL->delete('user_tokens', ['google_id' => $google_id]);
+                    http_response_code(401);
+                    return [
+                        'status' => 'error',
+                        'message' => 'Token không hợp lệ. Vui lòng đăng nhập lại.'
+                    ];
+                }
+                
+                // Tạo access token mới
+                $newAccessToken = $jwtHandler->createAccessToken(
+                    $user['email'], 
+                    $user['role'], 
+                    $user['id'], 
+                    $user['FullName']
+                );
+                
+                // Đặt access token mới vào cookie
+                $cookieSet = setcookie('access_token', $newAccessToken, [
+                    'expires' => time() + 60, // 1 phút
+                    'path' => '/',
+                    'httponly' => false,
+                    'samesite' => 'Lax',
+                    'secure' => false
+                ]);
+                
+                error_log("REFRESH_TOKEN: New cookie set result: " . ($cookieSet ? 'SUCCESS' : 'FAILED'));
+                
                 return [
-                    'status' => 'error',
-                    'message' => 'Missing GoogleID'
+                    'status' => 'success',
+                    'message' => 'Làm mới token thành công',
+                    'access_token' => $newAccessToken,
+                    'cookie_set' => $cookieSet
                 ];
 
             case 'logout':
@@ -660,7 +822,16 @@ class ApiController {
                 $user = $this->authController->GetUserByEmail($email);
                 $google_id = $user['GoogleID'] ?? null;
                 if ($email) {
+                    // Xóa refresh token khỏi database
                     if ($this->dataController->deleteData($table, ['google_id' => $google_id])) {
+                        // Xóa access token khỏi cookie
+                        setcookie('access_token', '', [
+                            'expires' => time() - 3600,
+                            'path' => '/',
+                            'httponly' => true,
+                            'samesite' => 'Strict'
+                        ]);
+                        
                         return [
                             'status' => 'success',
                             'message' => 'Đăng xuất thành công'

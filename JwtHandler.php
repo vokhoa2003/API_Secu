@@ -4,20 +4,24 @@ require_once __DIR__ . '/config/jwt.php';
 if (!class_exists('JwtHandler')) {
     class JwtHandler {
         private $secret;
+        private $config;
+        
         public function __construct()
         {   
-            $config = require __DIR__. '/config/jwt.php';
-            $this->secret = $config['secret_key'];
-
+            $this->config = require __DIR__. '/config/jwt.php';
+            $this->secret = $this->config['secret_key'];
         }
-        public function createToken($email, $role, $id, $fullname)
+        
+        // Tạo access token (hết hạn 1 phút)
+        public function createAccessToken($email, $role, $id, $fullname)
         {
             $header = json_encode(['typ' => 'JWT', 'alg' => 'HS256']);
             $payload = json_encode([
                 "iss" => "API_Security",
                 "aud" => "user",
                 "iat" => time(),
-                "exp" => time() + 3600,
+                "exp" => time() + $this->config['access_token_expiration'],
+                "type" => "access",
                 "data" =>[
                     "email" => $email,
                     "role" => $role,
@@ -32,6 +36,38 @@ if (!class_exists('JwtHandler')) {
             $signatureBase64 = $this->base64UrlEncode($signature);
             
             return "$headerBase64.$payloadBase64.$signatureBase64";
+        }
+        
+        // Tạo refresh token (hết hạn 1 giờ)
+        public function createRefreshToken($email, $role, $id, $fullname)
+        {
+            $header = json_encode(['typ' => 'JWT', 'alg' => 'HS256']);
+            $payload = json_encode([
+                "iss" => "API_Security",
+                "aud" => "user",
+                "iat" => time(),
+                "exp" => time() + $this->config['refresh_token_expiration'],
+                "type" => "refresh",
+                "data" =>[
+                    "email" => $email,
+                    "role" => $role,
+                    "id" => $id,
+                    "FullName" => $fullname
+                ],
+            ]);
+
+            $headerBase64 = $this->base64UrlEncode($header);
+            $payloadBase64 = $this->base64UrlEncode($payload);
+            $signature = hash_hmac('sha256', "$headerBase64.$payloadBase64", $this->secret, true);
+            $signatureBase64 = $this->base64UrlEncode($signature);
+            
+            return "$headerBase64.$payloadBase64.$signatureBase64";
+        }
+        
+        // Giữ lại method cũ để tương thích ngược
+        public function createToken($email, $role, $id, $fullname)
+        {
+            return $this->createAccessToken($email, $role, $id, $fullname);
         }
 
         public function verifyToken($jwt){
