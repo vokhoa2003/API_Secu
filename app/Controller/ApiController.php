@@ -106,22 +106,26 @@ class ApiController {
         error_log("Params: " . print_r($params, true));
 
         // ==========================================
-    // 🔴 RATE LIMIT CHO LOGIN - TRƯỚC KHI CHECK CSRF
-    // ==========================================
-    if ($action === 'app_login' || $action === 'login') {
-        $ip = $_SERVER['REMOTE_ADDR'];
+// 🔴 RATE LIMIT CHO LOGIN - TRƯỚC KHI CHECK CSRF
+// ==========================================
+if ($action === 'app_login' || $action === 'login') {
+    $ip = $_SERVER['REMOTE_ADDR'];
+    
+    // ✅ Max 10 login attempts trong 5 phút
+    if (!$this->rateLimiter->check('login:' . $ip, 10, 300)) {
+        http_response_code(429);
         
-        // ✅ Max 10 login attempts trong 5 phút
-        if (!$this->rateLimiter->check('login:' . $ip, 10, 300)) {
-            http_response_code(429); // Too Many Requests
-            return [
-                'status' => 'error',
-                'message' => 'Quá nhiều lần thử đăng nhập. Vui lòng thử lại sau 5 phút.',
-                'retry_after' => 300
-            ];
-        }
+        // ✅ KHÔNG redirect, chỉ trả JSON
+        // callback.php sẽ tự xử lý redirect
+        echo json_encode([
+            'status' => 'error',
+            'message' => 'Quá nhiều lần thử đăng nhập. Vui lòng thử lại sau 5 phút.',
+            'error_code' => 'RATE_LIMIT_EXCEEDED',
+            'retry_after' => 300
+        ], JSON_UNESCAPED_UNICODE);
+        exit; // ✅ Quan trọng: exit ngay để không chạy code phía dưới
     }
-
+}
         //Kiểm tra CSRF token (truyền action để special-case app_login)
         if (!$this->checkCsrf($params, $action)) {
             return [
