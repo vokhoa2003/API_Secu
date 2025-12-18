@@ -36,5 +36,3 @@ $client->addScope("profile");
 
 // Xuất object client để dùng trong index.php
 return $client;
-?>
-

@@ -52,12 +52,12 @@ if (strpos($requestUri, '/API_Secu') === 0) {
     $result = ['error' => 'API endpoint must start with /API_Secu'];
 }
 
-// ✅ Chuẩn hóa kết quả thành List<Object> định dạng JSON
+// Chuẩn hóa kết quả thành List<Object> định dạng JSON
 if (!is_array($result)) {
     $result = [$result];
 }
 
-// ✅ PHÂN BIỆT MODEL: teacher vs account (Task)
+// PHÂN BIỆT MODEL: teacher vs account (Task)
 //CHUẨN HÓA Chuyển PascalCase (DB) → camelCase (Java)
 foreach ($result as &$item) {
     if (!is_array($item)) continue;
@@ -155,4 +155,3 @@ foreach ($result as &$item) {
 
 echo json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
 exit;
-?>

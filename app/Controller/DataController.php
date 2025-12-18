@@ -1,17 +1,20 @@
 <?php
 require_once __DIR__ . '/../Model/mSQL.php';
 
-class DataController {
+class DataController
+{
     private $modelSQL;
 
-    public function __construct() {
+    public function __construct()
+    {
         $this->modelSQL = new ModelSQL();
     }
 
     /**
      * Lấy dữ liệu từ bảng với điều kiện
      */
-    public function getData($table, $conditions = [], $columns = ['*'], $orderBy = '', $limit = '') {
+    public function getData($table, $conditions = [], $columns = ['*'], $orderBy = '', $limit = '')
+    {
         if (!$table) {
             throw new Exception('Missing table name');
         }
@@ -28,7 +31,8 @@ class DataController {
     /**
      * Thêm dữ liệu vào bảng
      */
-    public function addData($table, $data) {
+    public function addData($table, $data)
+    {
         $data['CreateDate'] = date('Y-m-d H:i:s');
         $data['UpdateDate'] = date('Y-m-d H:i:s');
         return $this->modelSQL->insert($table, $data);
@@ -37,7 +41,8 @@ class DataController {
     /**
      * Cập nhật dữ liệu
      */
-    public function updateData($table, $data, $conditions) {
+    public function updateData($table, $data, $conditions)
+    {
         $oldDataResult = $this->modelSQL->viewData($table, $conditions);
         if (!$oldDataResult || $oldDataResult->num_rows === 0) {
             return false; // Không tìm thấy dữ liệu để cập nhật
@@ -62,11 +67,11 @@ class DataController {
         return $this->modelSQL->update($table, $data, $conditions);
     }
 
-        /**
-         * Xóa dữ liệu
-         */
-        public function deleteData($table, $conditions) {
-            return $this->modelSQL->delete($table, $conditions);
+    /**
+     * Xóa dữ liệu
+     */
+    public function deleteData($table, $conditions)
+    {
+        return $this->modelSQL->delete($table, $conditions);
     }
 }
-?>

@@ -1,12 +1,14 @@
 <?php
 //include("../../JwtHandler.php");
 require __DIR__ . "/../../JwtHandler.php";
-class AuthMiddleware{
-    public static function verifyRequest($action){
-        $protectedAction = ['update', 'delete', 'logout', 'add', 'AdminUpdate', 'get', 'autoGet','autoUpdate', 'AdminUpdate', 'muitiInsert'];
-        if(in_array($action, $protectedAction)){
+class AuthMiddleware
+{
+    public static function verifyRequest($action)
+    {
+        $protectedAction = ['update', 'delete', 'logout', 'add', 'AdminUpdate', 'get', 'autoGet', 'autoUpdate', 'AdminUpdate', 'muitiInsert'];
+        if (in_array($action, $protectedAction)) {
             $headers = getallheaders();
-            if(!isset($headers["Authorization"])){
+            if (!isset($headers["Authorization"])) {
                 http_response_code(401);
                 return json_encode(array("error" => "Missing Authorization header"));
             }
@@ -24,11 +26,10 @@ class AuthMiddleware{
             if (empty($token)) {
                 http_response_code(401);
                 echo json_encode(array("error" => "Missing token"));
-
             }
             $jwtHandler = new JwtHandler;
             $result = $jwtHandler->verifyToken($token);
-            if($result === null){
+            if ($result === null) {
                 http_response_code(401);
                 echo json_encode(array("error" => "Invalid or expired token authmiddleware"));
                 exit;
@@ -39,10 +40,9 @@ class AuthMiddleware{
                 echo json_encode(['error' => 'Only admins can do this action'], JSON_PRETTY_PRINT);
                 exit;
             }
-            
+
             return $result['data'];
         }
         return null;
     }
 }
-?>

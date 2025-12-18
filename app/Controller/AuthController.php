@@ -2,17 +2,20 @@
 require_once __DIR__ . '/../Model/mSQL.php';
 require_once __DIR__ . "/../../JwtHandler.php";
 require_once __DIR__ . "/../Middleware/AuthMiddleware.php";
-class AuthController{
+class AuthController
+{
     private $modelSQL;
     private $jwtHandler;
 
-    public function __construct() {
+    public function __construct()
+    {
         $this->modelSQL = new ModelSQL();
         $this->jwtHandler = new JwtHandler();
     }
-    public function LoginWithGoogle($googleId){
+    public function LoginWithGoogle($googleId)
+    {
 
-        if(!isset($googleId) || empty($googleId)){
+        if (!isset($googleId) || empty($googleId)) {
             // http_response_code(400);
             // echo json_encode(array("error" => "Missing google_id"));
             // exit;
@@ -21,8 +24,8 @@ class AuthController{
         }
         // $googleId = $_POST["google_id"];
         $user = $this->GetUserIdByGoogleId($googleId);
-        
-        if(!$user){
+
+        if (!$user) {
             http_response_code(401);
             // echo json_encode(array("error" => "User not found"));
             return ["error" => "User not found"];
@@ -30,7 +33,7 @@ class AuthController{
         }
         //print_r($user_id);
         //$jwtHanlder = new JwtHandler;
-        if(isset($user['Status']) && $user['Status'] == 'Blocked'){
+        if (isset($user['Status']) && $user['Status'] == 'Blocked') {
             http_response_code(401);
             // echo json_encode(array("error" => "User is inactive"));
             return ["error" => "User is inactive"];
@@ -39,17 +42,18 @@ class AuthController{
         $refreshToken = $this->jwtHandler->createRefreshToken($user['email'], $user['role'], $user['id'], $user['FullName']);
         error_log("Generated token: " . ($token ?? 'Null'));
         // json_encode(array("token" => $token));
-        if(!isset($refreshToken) || empty($refreshToken)){
+        if (!isset($refreshToken) || empty($refreshToken)) {
             http_response_code(500);
             return ["error" => "Token generation failed"];
             exit;
         }
-        return ["status" => "success", 
-        "refresh_token" => $refreshToken,
+        return [
+            "status" => "success",
+            "refresh_token" => $refreshToken,
         ];
-        
     }
-    public function GetUserIdByGoogleId($google_id, $table = 'account') {
+    public function GetUserIdByGoogleId($google_id, $table = 'account')
+    {
         // Có thể truyền bảng từ ApiController
         $result = $this->modelSQL->ViewData($table, ['GoogleID' => $google_id]);
         if ($result && $row = $result->fetch_assoc()) {
@@ -61,7 +65,8 @@ class AuthController{
     }
 
     // Lấy user theo email (tương tự GetUserIdByGoogleId)
-    public function GetUserByEmail($email, $table = 'account') {
+    public function GetUserByEmail($email, $table = 'account')
+    {
         if (empty($email)) {
             return null;
         }
@@ -73,7 +78,8 @@ class AuthController{
         error_log("GetUserByEmail: No user found for email $email");
         return null;
     }
-    public function getBearerToken(){
+    public function getBearerToken()
+    {
         $headers = getallheaders();
         if (!isset($headers['Authorization'])) {
             http_response_code(401);
@@ -100,4 +106,3 @@ class AuthController{
         return $userData['data'];
     }
 }
-?>

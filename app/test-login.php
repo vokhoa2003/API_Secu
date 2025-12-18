@@ -38,7 +38,7 @@ $csrfToken = bin2hex(random_bytes(32));
 // Set cookies
 if (isset($result['token'])) {
     $secureFlag = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
-    
+
     // Set auth_token cookie
     setcookie('auth_token', $result['token'], [
         'expires' => time() + 3600,
@@ -48,7 +48,7 @@ if (isset($result['token'])) {
         'httponly' => true,
         'samesite' => 'Lax'
     ]);
-    
+
     // Set csrf_token cookie
     setcookie('csrf_token', $csrfToken, [
         'expires' => time() + 3600,
@@ -58,13 +58,13 @@ if (isset($result['token'])) {
         'httponly' => false, // Allow JS to read for double-submit CSRF
         'samesite' => 'Strict'
     ]);
-    
+
     // Also start session and store CSRF
     if (session_status() !== PHP_SESSION_ACTIVE) {
         session_start();
     }
     $_SESSION['csrf_token'] = $csrfToken;
-    
+
     echo json_encode([
         "status" => "success",
         "message" => "Authentication successful for ZAP testing",
@@ -75,4 +75,3 @@ if (isset($result['token'])) {
     http_response_code(500);
     echo json_encode(["error" => "Token generation failed"]);
 }
-?>

@@ -1,13 +1,16 @@
 <?php
-class Encryption {
+class Encryption
+{
     private $key;
     private $cipher = 'AES-256-CBC';
 
-    public function __construct($key) {
+    public function __construct($key)
+    {
         $this->key = hash('sha256', $key, true);
     }
 
-    public function encrypt($data) {
+    public function encrypt($data)
+    {
         if (is_array($data)) {
             $data = json_encode($data);
         }
@@ -27,7 +30,8 @@ class Encryption {
         return $encrypted;
     }
 
-    public function decrypt($encryptedData) {
+    public function decrypt($encryptedData)
+    {
         // Giải mã base64
         $data = base64_decode($encryptedData);
         if ($data === false) {
@@ -50,4 +54,3 @@ class Encryption {
         return $result !== null ? $result : $decrypted;
     }
 }
-?>

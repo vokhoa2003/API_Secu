@@ -7,14 +7,16 @@ require_once __DIR__ . '/../Middleware/AuthMiddleware.php';
 require_once __DIR__ . '/../Middleware/RateLimiter.php';
 require_once __DIR__ . '/../../JwtHandler.php';
 
-class ApiController {
+class ApiController
+{
     private $dataController;
     private $authController;
     private $modelSQL;
     private $rateLimiter;
     private $jwtHandler;
 
-    public function __construct() {
+    public function __construct()
+    {
         $this->dataController = new DataController();
         $this->authController = new AuthController();
         $this->modelSQL = new ModelSQL();
@@ -23,7 +25,8 @@ class ApiController {
     }
 
     // Thay thế hàm checkCsrf hiện tại bằng phiên bản nhận thêm $action
-    private function checkCsrf($params, $action = null) {
+    private function checkCsrf($params, $action = null)
+    {
         $method = $_SERVER['REQUEST_METHOD'];
         if (in_array($method, ['POST', 'PUT', 'DELETE'])) {
             $tokenParam = $params['csrf_token'] ?? null;
@@ -73,59 +76,63 @@ class ApiController {
         return true;
     }
 
-    private function verifyGoogleToken($accessToken) {
-    $url = 'https://oauth2.googleapis.com/tokeninfo?access_token=' . urlencode($accessToken);
-    
-    $ch = curl_init();
-    curl_setopt($ch, CURLOPT_URL, $url);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 10);
-    
-    $response = curl_exec($ch);
-    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
-    
-    if ($httpCode !== 200) {
-        return false;
-    }
-    
-    $tokenInfo = json_decode($response, true);
-    
-    // Kiểm tra token còn hạn và thuộc về app 
-    if (!isset($tokenInfo['email']) || 
-        !isset($tokenInfo['exp']) || 
-        $tokenInfo['exp'] < time()) {
-        return false;
-    }
-    
-    return $tokenInfo;
-}
+    private function verifyGoogleToken($accessToken)
+    {
+        $url = 'https://oauth2.googleapis.com/tokeninfo?access_token=' . urlencode($accessToken);
 
-    public function handleRequest($action, $params) {
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($httpCode !== 200) {
+            return false;
+        }
+
+        $tokenInfo = json_decode($response, true);
+
+        // Kiểm tra token còn hạn và thuộc về app 
+        if (
+            !isset($tokenInfo['email']) ||
+            !isset($tokenInfo['exp']) ||
+            $tokenInfo['exp'] < time()
+        ) {
+            return false;
+        }
+
+        return $tokenInfo;
+    }
+
+    public function handleRequest($action, $params)
+    {
         error_log("Action: $action");
         error_log("Params: " . print_r($params, true));
 
         // ==========================================
-// 🔴 RATE LIMIT CHO LOGIN - TRƯỚC KHI CHECK CSRF
-// ==========================================
-if ($action === 'app_login' || $action === 'login') {
-    $ip = $_SERVER['REMOTE_ADDR'];
-    
-    // ✅ Max 10 login attempts trong 5 phút
-    if (!$this->rateLimiter->check('login:' . $ip, 2, 300)) {
-        http_response_code(429);
-        
-        // ✅ KHÔNG redirect, chỉ trả JSON
-        // callback.php sẽ tự xử lý redirect
-        echo json_encode([
-            'status' => 'error',
-            'message' => 'Quá nhiều lần thử đăng nhập. Vui lòng thử lại sau 5 phút.',
-            'error_code' => 'RATE_LIMIT_EXCEEDED',
-            'retry_after' => 300
-        ], JSON_UNESCAPED_UNICODE);
-        exit; // ✅ Quan trọng: exit ngay để không chạy code phía dưới
-    }
-}
+        // RATE LIMIT CHO LOGIN - TRƯỚC KHI CHECK CSRF
+        // ==========================================
+        if ($action === 'app_login' || $action === 'login') {
+            $ip = $_SERVER['REMOTE_ADDR'];
+
+            // Max 10 login attempts trong 5 phút
+            if (!$this->rateLimiter->check('login:' . $ip, 2, 300)) {
+                http_response_code(429);
+
+                // KHÔNG redirect, chỉ trả JSON
+                // callback.php sẽ tự xử lý redirect
+                echo json_encode([
+                    'status' => 'error',
+                    'message' => 'Quá nhiều lần thử đăng nhập. Vui lòng thử lại sau 5 phút.',
+                    'error_code' => 'RATE_LIMIT_EXCEEDED',
+                    'retry_after' => 300
+                ], JSON_UNESCAPED_UNICODE);
+                exit; //Quan trọng: exit ngay để không chạy code phía dưới
+            }
+        }
         //Kiểm tra CSRF token (truyền action để special-case app_login)
         if (!$this->checkCsrf($params, $action)) {
             return [
@@ -162,20 +169,20 @@ if ($action === 'app_login' || $action === 'login') {
 
                 if ($email && $full_name && $access_token && $expires_at) {
                     //Verify token với Google
-        $tokenInfo = $this->verifyGoogleToken($access_token);
-        if ($tokenInfo === false) {
-            return [
-                'status' => 'error',
-                'message' => 'Google access token không hợp lệ hoặc đã hết hạn'
-            ];
-        }
-        //Verify email khớp
-        if ($tokenInfo['email'] !== $email) {
-            return [
-                'status' => 'error',
-                'message' => 'Email không khớp với Google token'
-            ];
-        }
+                    $tokenInfo = $this->verifyGoogleToken($access_token);
+                    if ($tokenInfo === false) {
+                        return [
+                            'status' => 'error',
+                            'message' => 'Google access token không hợp lệ hoặc đã hết hạn'
+                        ];
+                    }
+                    //Verify email khớp
+                    if ($tokenInfo['email'] !== $email) {
+                        return [
+                            'status' => 'error',
+                            'message' => 'Email không khớp với Google token'
+                        ];
+                    }
                     // ưu tiên tìm bằng GoogleID nếu có
                     $user = null;
                     if ($google_id) {
@@ -237,7 +244,7 @@ if ($action === 'app_login' || $action === 'login') {
                         }
                     }
 
-                    // ✅ Block tất cả token cũ của user trước
+                    //Block tất cả token cũ của user trước
                     $googleIdForUpdate = $google_id ?? ($user['GoogleID'] ?? null);
                     if ($googleIdForUpdate) {
                         $blockOldTokens = [
@@ -254,7 +261,7 @@ if ($action === 'app_login' || $action === 'login') {
 
                     // Tạo token mới (refresh_token)
                     $token = $this->authController->LoginWithGoogle($googleIdForUpdate);
-                    
+
                     // Lưu token mới với trạng thái Active
                     $insertResult = $this->modelSQL->insert('user_tokens', [
                         'google_id' => $googleIdForUpdate,
@@ -299,20 +306,20 @@ if ($action === 'app_login' || $action === 'login') {
 
                 if ($email && $full_name && $access_token && $expires_at) {
                     //Verify token với Google
-        $tokenInfo = $this->verifyGoogleToken($access_token);
-        if ($tokenInfo === false) {
-            return [
-                'status' => 'error',
-                'message' => 'Google access token không hợp lệ hoặc đã hết hạn'
-            ];
-        }
-        //Verify email khớp
-        if ($tokenInfo['email'] !== $email) {
-            return [
-                'status' => 'error',
-                'message' => 'Email không khớp với Google token'
-            ];
-        }
+                    $tokenInfo = $this->verifyGoogleToken($access_token);
+                    if ($tokenInfo === false) {
+                        return [
+                            'status' => 'error',
+                            'message' => 'Google access token không hợp lệ hoặc đã hết hạn'
+                        ];
+                    }
+                    //Verify email khớp
+                    if ($tokenInfo['email'] !== $email) {
+                        return [
+                            'status' => 'error',
+                            'message' => 'Email không khớp với Google token'
+                        ];
+                    }
                     // Tìm user theo GoogleID nếu có
                     $existingUser = null;
                     if ($google_id) {
@@ -341,7 +348,7 @@ if ($action === 'app_login' || $action === 'login') {
                     }
 
                     // Tạo bản ghi liên quan nếu cần
-                    if(isset($existingUser['role']) && $existingUser['role'] === 'student'){
+                    if (isset($existingUser['role']) && $existingUser['role'] === 'student') {
                         $exists = $this->dataController->getData('student', ['IdAccount' => $existingUser['id']]);
                         if (!$exists) {
                             $this->dataController->addData('student', [
@@ -350,7 +357,7 @@ if ($action === 'app_login' || $action === 'login') {
                             ]);
                         }
                     }
-                    if(isset($existingUser['role']) && $existingUser['role'] === 'teacher'){
+                    if (isset($existingUser['role']) && $existingUser['role'] === 'teacher') {
                         $exists = $this->dataController->getData('teacher', ['IdAccount' => $existingUser['id']]);
                         if (!$exists) {
                             $this->dataController->addData('teacher', [
@@ -359,7 +366,7 @@ if ($action === 'app_login' || $action === 'login') {
                             ]);
                         }
                     }
-                    if(isset($existingUser['role']) && $existingUser['role'] === 'admin'){
+                    if (isset($existingUser['role']) && $existingUser['role'] === 'admin') {
                         $exists = $this->dataController->getData('admin', ['IdAccount' => $existingUser['id']]);
                         if (!$exists) {
                             $this->dataController->addData('admin', [
@@ -369,7 +376,7 @@ if ($action === 'app_login' || $action === 'login') {
                         }
                     }
 
-                    // ✅ Block tất cả token cũ của user trước
+                    //Block tất cả token cũ của user trước
                     $googleIdForUpdate = $google_id ?? ($existingUser['GoogleID'] ?? null);
                     if ($googleIdForUpdate) {
                         $blockOldTokens = [
@@ -384,74 +391,72 @@ if ($action === 'app_login' || $action === 'login') {
                         $this->modelSQL->autoUpdate('user_tokens', $blockOldTokens, 'UPDATE_WHERE');
                     }
 
-                    // ✅ BƯỚC 1: Tạo JWT refresh token TRƯỚC (giống web)
-        $token = $this->authController->LoginWithGoogle($googleIdForUpdate);
-        
-        if (isset($token['error']) || !$token['refresh_token']) {
-            return [
-                'status' => 'error',
-                'message' => $token['error'] ?? 'Tạo token thất bại'
-            ];
-        }
+                    //Tạo JWT refresh token TRƯỚC
+                    $token = $this->authController->LoginWithGoogle($googleIdForUpdate);
 
-        // ✅ BƯỚC 2: Lưu JWT refresh token vào user_tokens (giống web)
-        $insertResult = $this->modelSQL->insert('user_tokens', [
-            'google_id' => $googleIdForUpdate,
-            'refresh_token' => $token['refresh_token'],  // ← JWT refresh token
-            'Status' => 'Active',
-            'expires_at' => $expires_at
-        ]);
-        
-        if (!$insertResult) {
-            return [
-                'status' => 'error',
-                'message' => 'Lưu refresh token thất bại'
-            ];
-        }
-        
-        // ✅ BƯỚC 3: Tạo JWT access token để trả về cho app (giống web)
-        $accessToken = $this->jwtHandler->createAccessToken(
-            $existingUser['email'], 
-            $existingUser['role'], 
-            $existingUser['id'], 
-            $existingUser['FullName']
-        );
-        
-        return [
-            'status' => 'success',
-            'token' => $accessToken,
-            'message' => 'Đăng nhập thành công app',
-            'role' => $existingUser['role'],
-            'account_status' => $existingUser['Status'] ?? null
-        ];
-    }
-    
-    return [
-        'status' => 'error',
-        'message' => 'Thiếu thông tin'
-    ];
+                    if (isset($token['error']) || !$token['refresh_token']) {
+                        return [
+                            'status' => 'error',
+                            'message' => $token['error'] ?? 'Tạo token thất bại'
+                        ];
+                    }
+
+                    //Lưu JWT refresh token vào user_tokens 
+                    $insertResult = $this->modelSQL->insert('user_tokens', [
+                        'google_id' => $googleIdForUpdate,
+                        'refresh_token' => $token['refresh_token'],  // ← JWT refresh token
+                        'Status' => 'Active',
+                        'expires_at' => $expires_at
+                    ]);
+
+                    if (!$insertResult) {
+                        return [
+                            'status' => 'error',
+                            'message' => 'Lưu refresh token thất bại'
+                        ];
+                    }
+
+                    //Tạo JWT access token để trả về cho app
+                    $accessToken = $this->jwtHandler->createAccessToken(
+                        $existingUser['email'],
+                        $existingUser['role'],
+                        $existingUser['id'],
+                        $existingUser['FullName']
+                    );
+
+                    return [
+                        'status' => 'success',
+                        'token' => $accessToken,
+                        'message' => 'Đăng nhập thành công app',
+                        'role' => $existingUser['role'],
+                        'account_status' => $existingUser['Status'] ?? null
+                    ];
+                }
+
+                return [
+                    'status' => 'error',
+                    'message' => 'Thiếu thông tin'
+                ];
 
 
             case 'get':
-                
+
                 $limit = $params['limit'] ?? '';
                 $table = $params['table'] ?? 'account';
                 $columns = $params['columns'] ?? ['*'];
                 $orderBy = $params['orderBy'] ?? '';
-                if ($table === 'account'){
-                // Chỉ cho phép teacher và student xem dữ liệu của chính mình
+                if ($table === 'account') {
+                    // Chỉ cho phép teacher và student xem dữ liệu của chính mình
                     if ($params['role'] === 'student') {
                         $conditions = ['email' => $params['email']];
                     } elseif ($params['role'] === 'admin') {
                         if ($params['scope'] === 'self') {
                             $conditions = ['email' => $params['email']];
-                        }
-                        elseif ($params['scope'] === 'all') {
+                        } elseif ($params['scope'] === 'all') {
                             $conditions = [];
-                        }elseif (empty($params['scope'])) {
-                            $conditions = array_filter($params, fn($key) => !in_array($key, ['table','action','csrf_token','role','GoogleID']), ARRAY_FILTER_USE_KEY);
-                        }
-                        else {
+                        } elseif (empty($params['scope'])) {
+                            $conditions = array_filter($params, fn($key) => !in_array($key, ['table', 'action', 'csrf_token', 'role', 'GoogleID']), ARRAY_FILTER_USE_KEY);
+                        } else {
                             http_response_code(400);
                             return [
                                 'status' => 'error',
@@ -465,20 +470,18 @@ if ($action === 'app_login' || $action === 'login') {
                         //         'message' => 'Admin must specify query conditions'
                         //     ];
                         // }
-                    }
-                    else if ($params['role'] === 'teacher'){
+                    } else if ($params['role'] === 'teacher') {
                         $conditions = ['email' => $params['email']];
-                    }   
-                     else {
+                    } else {
                         http_response_code(403);
                         return [
                             'status' => 'error',
                             'message' => 'Permission denied'
                         ];
                     }
-                } 
+                }
                 $data = $this->dataController->getData($table, $conditions, $columns, $orderBy, $limit);
-                if(isset($data[0]['GoogleID'])){
+                if (isset($data[0]['GoogleID'])) {
                     foreach ($data as &$row) {
                         if (isset($row['GoogleID'])) {
                             if (isset($row['IdentityNumber'])) {
@@ -496,20 +499,20 @@ if ($action === 'app_login' || $action === 'login') {
 
             case 'add':
                 // ✅ Rate limit: Max 50 creations/phút
-            $userId = $this->getUserIdFromParams($params);
-            if ($userId && !$this->rateLimiter->check('add:' . $userId, 2, 60)) {
-                http_response_code(429);
-                return [
-                    'status' => 'error',
-                    'message' => 'Bạn tạo dữ liệu quá nhanh. Vui lòng chậm lại.'
-                ];
-            }
+                $userId = $this->getUserIdFromParams($params);
+                if ($userId && !$this->rateLimiter->check('add:' . $userId, 2, 60)) {
+                    http_response_code(429);
+                    return [
+                        'status' => 'error',
+                        'message' => 'Bạn tạo dữ liệu quá nhanh. Vui lòng chậm lại.'
+                    ];
+                }
                 $table = $params['table'] ?? 'account';
                 $data = array_filter($params, fn($key) => !in_array($key, ['table', 'action', 'csrf_token']), ARRAY_FILTER_USE_KEY);
                 $data['role'] = $data['role'] ?? 'customer';
                 if (!empty($data)) {
-                    if(isset($data['email'])){
-                        if($this->dataController->getData($table, ['email' => $data['email']])){
+                    if (isset($data['email'])) {
+                        if ($this->dataController->getData($table, ['email' => $data['email']])) {
                             return [
                                 'status' => 'error',
                                 'message' => 'Người dùng đã tồn tại'
@@ -540,18 +543,18 @@ if ($action === 'app_login' || $action === 'login') {
                     'message' => 'Thiếu thông tin'
                 ];
 
-            
+
 
             case 'AdminUpdate':
                 // ✅ Rate limit: Max 50 updates/phút
-            $userId = $this->getUserIdFromParams($params);
-            if ($userId && !$this->rateLimiter->check('AdminUpdate:' . $userId, 2, 60)) {
-                http_response_code(429);
-                return [
-                    'status' => 'error',
-                    'message' => 'Bạn cập nhật quá nhanh. Vui lòng chậm lại.'
-                ];
-            }
+                $userId = $this->getUserIdFromParams($params);
+                if ($userId && !$this->rateLimiter->check('AdminUpdate:' . $userId, 2, 60)) {
+                    http_response_code(429);
+                    return [
+                        'status' => 'error',
+                        'message' => 'Bạn cập nhật quá nhanh. Vui lòng chậm lại.'
+                    ];
+                }
                 $table = $params['table'] ?? 'account';
                 $id = $params['id'] ?? null;
                 $email = $params['emailUpdate'] ?? null;
@@ -570,8 +573,7 @@ if ($action === 'app_login' || $action === 'login') {
                     $conditions['id'] = $params['id'];
                 } elseif (!empty($params['Id'])) {
                     $conditions['Id'] = $params['Id'];
-                }
-                elseif(!empty($params['Id'])){
+                } elseif (!empty($params['Id'])) {
                     $conditions['Id'] = $params['Id'];
                 }
                 // 2. Nếu không có Id và là bảng account → dùng email
@@ -583,11 +585,11 @@ if ($action === 'app_login' || $action === 'login') {
                     return [
                         'status' => 'error',
                         'message' => 'Thiếu Id (cho lớp/GV/HS) hoặc email (cho tài khoản)',
-                        'params'=>$params,
-                        'adminRoles'=>$adminRoles,
-                        'adminEmail'=>$adminEmail,
-                        'data'=>$data
-            
+                        'params' => $params,
+                        'adminRoles' => $adminRoles,
+                        'adminEmail' => $adminEmail,
+                        'data' => $data
+
                     ];
                 }
 
@@ -617,15 +619,15 @@ if ($action === 'app_login' || $action === 'login') {
                 ];
             case 'update':
                 // ✅ Rate limit: Max 50 updates/phút
-            $userId = $this->getUserIdFromParams($params);
-            if ($userId && !$this->rateLimiter->check('update:' . $userId, 50, 60)) {
-                http_response_code(429);
-                return [
-                    'status' => 'error',
-                    'message' => 'Bạn cập nhật quá nhanh. Vui lòng chậm lại.'
-                ];
-            }
-                if($params['role'] === 'student' && $params['table'] === 'account'){
+                $userId = $this->getUserIdFromParams($params);
+                if ($userId && !$this->rateLimiter->check('update:' . $userId, 50, 60)) {
+                    http_response_code(429);
+                    return [
+                        'status' => 'error',
+                        'message' => 'Bạn cập nhật quá nhanh. Vui lòng chậm lại.'
+                    ];
+                }
+                if ($params['role'] === 'student' && $params['table'] === 'account') {
                     $table = $params['table'] ?? 'account';
                     $data = array_filter($params, fn($key) => !in_array($key, ['table', 'action', 'csrf_token', 'GoogleID']), ARRAY_FILTER_USE_KEY);
                     $conditions = ['GoogleID' => $params['GoogleID'] ?? null];
@@ -646,7 +648,7 @@ if ($action === 'app_login' || $action === 'login') {
                         'status' => 'error',
                         'message' => 'Thiếu thông tin'
                     ];
-                }else{
+                } else {
                     http_response_code(403);
                     return [
                         'status' => 'error',
@@ -656,20 +658,20 @@ if ($action === 'app_login' || $action === 'login') {
 
             case 'delete':
                 // ✅ Rate limit: Max 20 deletes/phút (nghiêm hơn vì xóa nguy hiểm)
-            $userId = $this->getUserIdFromParams($params);
-            if ($userId && !$this->rateLimiter->check('delete:' . $userId, 20, 60)) {
-                http_response_code(429);
-                return [
-                    'status' => 'error',
-                    'message' => 'Bạn xóa quá nhiều. Vui lòng kiểm tra lại.'
-                ];
-            }
+                $userId = $this->getUserIdFromParams($params);
+                if ($userId && !$this->rateLimiter->check('delete:' . $userId, 20, 60)) {
+                    http_response_code(429);
+                    return [
+                        'status' => 'error',
+                        'message' => 'Bạn xóa quá nhiều. Vui lòng kiểm tra lại.'
+                    ];
+                }
                 $table = $params['table'] ?? 'account';
-                if ($table === 'classes' || $table === 'teacher' || $table === 'student'){
+                if ($table === 'classes' || $table === 'teacher' || $table === 'student') {
                     $conditions = ['Id' => $params['Id'] ?? null];
-                } else if($table === 'account'){
+                } else if ($table === 'account') {
                     $conditions = ['id' => $params['Id'] ?? null];
-                } else{
+                } else {
                     $conditions = array_filter($params, fn($key) => !in_array($key, ['table', 'action', 'csrf_token', 'email', 'roles']), ARRAY_FILTER_USE_KEY);
                 }
                 if (!empty($conditions)) {
@@ -693,34 +695,34 @@ if ($action === 'app_login' || $action === 'login') {
             case 'refresh_token':
                 $email = $params['email'] ?? '';
                 $currentToken = $params['current_token'] ?? null;
-                
-                    error_log("🔄 Refresh token request - Email: $email, Has current_token: " . ($currentToken ? 'yes' : 'no'));
-                
+
+                error_log("🔄 Refresh token request - Email: $email, Has current_token: " . ($currentToken ? 'yes' : 'no'));
+
                 if (!$email) {
                     return [
                         'status' => 'error',
                         'message' => 'Thiếu email'
                     ];
                 }
-                
+
                 // ✅ Ưu tiên: verify JWT từ app (trong body) - không check exp
                 if ($currentToken) {
                     $tokenInfo = $this->jwtHandler->verifyTokenToGetOldMail($currentToken);
-                        error_log("🔍 Extracted email from token: " . ($tokenInfo ?? 'null') . ", Matches request email: " . ($tokenInfo === $email ? 'yes' : 'no'));
-                    
+                    error_log("🔍 Extracted email from token: " . ($tokenInfo ?? 'null') . ", Matches request email: " . ($tokenInfo === $email ? 'yes' : 'no'));
+
                     if ($tokenInfo && $tokenInfo === $email) {
                         // Lấy thông tin user từ DB
                         $user = $this->authController->GetUserByEmail($email);
-                            error_log("👤 User from DB: " . ($user ? json_encode($user) : 'null'));
-                        
+                        error_log("👤 User from DB: " . ($user ? json_encode($user) : 'null'));
+
                         if ($user) {
                             $newToken = $this->jwtHandler->createAccessToken(
-                                $user['email'], 
-                                $user['role'], 
-                                $user['id'], 
+                                $user['email'],
+                                $user['role'],
+                                $user['id'],
                                 $user['FullName']
                             );
-                                error_log("✅ Generated new token for app: " . substr($newToken, 0, 50) . "...");
+                            error_log("✅ Generated new token for app: " . substr($newToken, 0, 50) . "...");
                             return [
                                 'status' => 'success',
                                 'token' => $newToken,
@@ -729,9 +731,9 @@ if ($action === 'app_login' || $action === 'login') {
                         }
                     }
                 }
-                
+
                 // ✅ Fallback: query refresh_token từ DB (cho web)
-                $tables = ['account','user_tokens'];
+                $tables = ['account', 'user_tokens'];
                 $columns = ['user_tokens.*', 'account.role', 'account.id', 'account.FullName'];
                 $join = [
                     [
@@ -744,7 +746,7 @@ if ($action === 'app_login' || $action === 'login') {
                     'user_tokens.Status' => 'Active'
                 ];
                 $result = $this->modelSQL->autoQuery($tables, $columns, $join, $conditions, []);
-                
+
                 $data = [];
                 if ($result instanceof mysqli_result) {
                     while ($row = $result->fetch_assoc()) {
@@ -753,27 +755,29 @@ if ($action === 'app_login' || $action === 'login') {
                 } else {
                     $data = $result;
                 }
-                
+
                 if (!empty($data)) {
                     foreach ($data as $row) {
-                        if (isset($row['refresh_token']) && 
-                            $row['Status'] === 'Active' && 
-                            isset($row['expires_at']) && 
-                            strtotime($row['expires_at']) >= time()) {
-                            
+                        if (
+                            isset($row['refresh_token']) &&
+                            $row['Status'] === 'Active' &&
+                            isset($row['expires_at']) &&
+                            strtotime($row['expires_at']) >= time()
+                        ) {
+
                             // Verify refresh_token từ DB
                             $getInfo = $this->jwtHandler->verifyToken($row['refresh_token']);
                             if (!$getInfo) {
                                 continue;
                             }
-                            
+
                             $newToken = $this->jwtHandler->createAccessToken(
-                                $email, 
-                                $row['role'], 
-                                $row['id'], 
+                                $email,
+                                $row['role'],
+                                $row['id'],
                                 $row['FullName']
                             );
-                            
+
                             return [
                                 'status' => 'success',
                                 'token' => $newToken,
@@ -782,7 +786,7 @@ if ($action === 'app_login' || $action === 'login') {
                         }
                     }
                 }
-                
+
                 return [
                     'status' => 'error',
                     'message' => 'Không tìm thấy token hợp lệ hoặc đã hết hạn'
@@ -790,25 +794,25 @@ if ($action === 'app_login' || $action === 'login') {
 
             case 'logout':
                 $email = $params['email'] ?? null;
-                
+
                 if (!$email) {
                     return [
                         'status' => 'error',
                         'message' => 'Không tìm thấy email'
                     ];
                 }
-                
+
                 // Lấy thông tin user để có google_id
                 $user = $this->authController->GetUserByEmail($email);
                 $google_id = $user['GoogleID'] ?? null;
-                
+
                 if (!$google_id) {
                     return [
                         'status' => 'error',
                         'message' => 'Không tìm thấy Google ID của tài khoản'
                     ];
                 }
-                
+
                 // Sử dụng autoUpdate để block tất cả token của user
                 $dataUpdate = [
                     [
@@ -818,16 +822,16 @@ if ($action === 'app_login' || $action === 'login') {
                         ]
                     ]
                 ];
-                
+
                 $result = $this->modelSQL->autoUpdate('user_tokens', $dataUpdate, 'UPDATE_WHERE');
-                
+
                 if ($result['status'] === 'success') {
                     return [
                         'status' => 'success',
                         'message' => 'Đăng xuất thành công'
                     ];
                 }
-                
+
                 return [
                     'status' => 'error',
                     'message' => 'Đăng xuất thất bại',
@@ -842,7 +846,7 @@ if ($action === 'app_login' || $action === 'login') {
                 if (isset($params['where']) && is_array($params['where'])) {
                     // Giữ nguyên nếu đã là mảng
                     $conditions = $params['where'];
-                }else{
+                } else {
                     $conditions = $params['conditions'] ?? [];
                 }
                 //$conditions = $params['conditions'] ?? [];
@@ -863,14 +867,14 @@ if ($action === 'app_login' || $action === 'login') {
                 ];
             case 'autoUpdate':
                 // ✅ Rate limit: Max 50 updates/phút
-            $userId = $this->getUserIdFromParams($params);
-            if ($userId && !$this->rateLimiter->check('autoUpdate:' . $userId, 2, 60)) {
-                http_response_code(429);
-                return [
-                    'status' => 'error',
-                    'message' => 'Bạn cập nhật quá nhanh. Vui lòng chậm lại.'
-                ];
-            }
+                $userId = $this->getUserIdFromParams($params);
+                if ($userId && !$this->rateLimiter->check('autoUpdate:' . $userId, 2, 60)) {
+                    http_response_code(429);
+                    return [
+                        'status' => 'error',
+                        'message' => 'Bạn cập nhật quá nhanh. Vui lòng chậm lại.'
+                    ];
+                }
                 $table = $params['table'] ?? '';
                 $data = $params['data'] ?? [];
                 $method = $params['method'] ?? 'UPSERT';
@@ -882,18 +886,18 @@ if ($action === 'app_login' || $action === 'login') {
                 ];
             case 'multiInsert':
                 // ✅ Rate limit: Max 10 bulk operations/phút
-            $userId = $this->getUserIdFromParams($params);
-            if ($userId && !$this->rateLimiter->check('bulk:' . $userId, 10, 60)) {
-                http_response_code(429);
-                return [
-                    'status' => 'error',
-                    'message' => 'Bạn thực hiện thao tác hàng loạt quá nhanh.'
-                ];
-            }
+                $userId = $this->getUserIdFromParams($params);
+                if ($userId && !$this->rateLimiter->check('bulk:' . $userId, 10, 60)) {
+                    http_response_code(429);
+                    return [
+                        'status' => 'error',
+                        'message' => 'Bạn thực hiện thao tác hàng loạt quá nhanh.'
+                    ];
+                }
                 $operations = $params['operations'] ?? [];
                 // debug log
-                file_put_contents(__DIR__.'/../../multi_insert_debug.log', date('c')." multiInsert payload: "
-                .json_encode($operations)."\n", FILE_APPEND);
+                file_put_contents(__DIR__ . '/../../multi_insert_debug.log', date('c') . " multiInsert payload: "
+                    . json_encode($operations) . "\n", FILE_APPEND);
                 $res = $this->modelSQL->multiInsert($operations);
                 header('Content-Type: application/json');
                 echo json_encode($res);
@@ -906,23 +910,23 @@ if ($action === 'app_login' || $action === 'login') {
         }
     }
     // ==========================================
-// Helper method để lấy userId
-// ==========================================
-private function getUserIdFromParams($params) {
-    // Thử lấy từ email (sau khi auth)
-    if (isset($params['email'])) {
-        $user = $this->authController->GetUserByEmail($params['email']);
-        return $user['id'] ?? null;
+    // Helper method để lấy userId
+    // ==========================================
+    private function getUserIdFromParams($params)
+    {
+        // Thử lấy từ email (sau khi auth)
+        if (isset($params['email'])) {
+            $user = $this->authController->GetUserByEmail($params['email']);
+            return $user['id'] ?? null;
+        }
+
+        // Thử lấy từ GoogleID
+        if (isset($params['GoogleID'])) {
+            $user = $this->authController->GetUserIdByGoogleId($params['GoogleID']);
+            return $user['id'] ?? null;
+        }
+
+        // Fallback: dùng IP nếu chưa login
+        return $_SERVER['REMOTE_ADDR'];
     }
-    
-    // Thử lấy từ GoogleID
-    if (isset($params['GoogleID'])) {
-        $user = $this->authController->GetUserIdByGoogleId($params['GoogleID']);
-        return $user['id'] ?? null;
-    }
-    
-    // Fallback: dùng IP nếu chưa login
-    return $_SERVER['REMOTE_ADDR'];
 }
-}
-?>

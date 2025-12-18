@@ -25,4 +25,3 @@ $result = $apiController->handleRequest($action, $params);
 $encryptedResult = $encryption->encrypt($result);
 echo json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
 //echo json_encode(['encrypted' => $encryptedResult], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
-?>
