@@ -384,47 +384,53 @@ if ($action === 'app_login' || $action === 'login') {
                         $this->modelSQL->autoUpdate('user_tokens', $blockOldTokens, 'UPDATE_WHERE');
                     }
 
-                    // Lưu token mới với trạng thái Active
-                    $insertResult = $this->modelSQL->insert('user_tokens', [
-                        'google_id' => $googleIdForUpdate,
-                        'refresh_token' => $access_token,
-                        'Status' => 'Active',
-                        'expires_at' => $expires_at
-                    ]);
-                    if (!$insertResult) {
-                        return [
-                            'status' => 'error',
-                            'message' => 'Lưu access token thất bại'
-                        ];
-                    }
-                    $token = $this->authController->LoginWithGoogle($googleIdForUpdate);
-                    if (isset($token['error']) || !$token['refresh_token']) {
-                        return [
-                            'status' => 'error',
-                            'message' => $token['error'] ?? 'Tạo token thất bại'
-                        ];
-                    }
-                    
-                    // Tạo JWT access token để trả về cho app
-                    $accessToken = $this->jwtHandler->createAccessToken(
-                        $existingUser['email'], 
-                        $existingUser['role'], 
-                        $existingUser['id'], 
-                        $existingUser['FullName']
-                    );
-                    
-                    return [
-                        'status' => 'success',
-                        'token' => $accessToken,
-                        'message' => 'Đăng nhập thành công app',
-                        'role' => $existingUser['role'],
-                        'account_status' => $existingUser['Status'] ?? null
-                    ];
-                }
-                return [
-                    'status' => 'error',
-                    'message' => 'Thiếu thông tin'
-                ];
+                    // ✅ BƯỚC 1: Tạo JWT refresh token TRƯỚC (giống web)
+        $token = $this->authController->LoginWithGoogle($googleIdForUpdate);
+        
+        if (isset($token['error']) || !$token['refresh_token']) {
+            return [
+                'status' => 'error',
+                'message' => $token['error'] ?? 'Tạo token thất bại'
+            ];
+        }
+
+        // ✅ BƯỚC 2: Lưu JWT refresh token vào user_tokens (giống web)
+        $insertResult = $this->modelSQL->insert('user_tokens', [
+            'google_id' => $googleIdForUpdate,
+            'refresh_token' => $token['refresh_token'],  // ← JWT refresh token
+            'Status' => 'Active',
+            'expires_at' => $expires_at
+        ]);
+        
+        if (!$insertResult) {
+            return [
+                'status' => 'error',
+                'message' => 'Lưu refresh token thất bại'
+            ];
+        }
+        
+        // ✅ BƯỚC 3: Tạo JWT access token để trả về cho app (giống web)
+        $accessToken = $this->jwtHandler->createAccessToken(
+            $existingUser['email'], 
+            $existingUser['role'], 
+            $existingUser['id'], 
+            $existingUser['FullName']
+        );
+        
+        return [
+            'status' => 'success',
+            'token' => $accessToken,
+            'message' => 'Đăng nhập thành công app',
+            'role' => $existingUser['role'],
+            'account_status' => $existingUser['Status'] ?? null
+        ];
+    }
+    
+    return [
+        'status' => 'error',
+        'message' => 'Thiếu thông tin'
+    ];
+
 
             case 'get':
                 
