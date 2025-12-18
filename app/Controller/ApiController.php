@@ -112,7 +112,7 @@ if ($action === 'app_login' || $action === 'login') {
     $ip = $_SERVER['REMOTE_ADDR'];
     
     // ✅ Max 10 login attempts trong 5 phút
-    if (!$this->rateLimiter->check('login:' . $ip, 10, 300)) {
+    if (!$this->rateLimiter->check('login:' . $ip, 2, 300)) {
         http_response_code(429);
         
         // ✅ KHÔNG redirect, chỉ trả JSON
@@ -491,7 +491,7 @@ if ($action === 'app_login' || $action === 'login') {
             case 'add':
                 // ✅ Rate limit: Max 50 creations/phút
             $userId = $this->getUserIdFromParams($params);
-            if ($userId && !$this->rateLimiter->check('add:' . $userId, 50, 60)) {
+            if ($userId && !$this->rateLimiter->check('add:' . $userId, 2, 60)) {
                 http_response_code(429);
                 return [
                     'status' => 'error',
@@ -539,7 +539,7 @@ if ($action === 'app_login' || $action === 'login') {
             case 'AdminUpdate':
                 // ✅ Rate limit: Max 50 updates/phút
             $userId = $this->getUserIdFromParams($params);
-            if ($userId && !$this->rateLimiter->check('AdminUpdate:' . $userId, 50, 60)) {
+            if ($userId && !$this->rateLimiter->check('AdminUpdate:' . $userId, 2, 60)) {
                 http_response_code(429);
                 return [
                     'status' => 'error',
@@ -858,7 +858,7 @@ if ($action === 'app_login' || $action === 'login') {
             case 'autoUpdate':
                 // ✅ Rate limit: Max 50 updates/phút
             $userId = $this->getUserIdFromParams($params);
-            if ($userId && !$this->rateLimiter->check('autoUpdate:' . $userId, 50, 60)) {
+            if ($userId && !$this->rateLimiter->check('autoUpdate:' . $userId, 2, 60)) {
                 http_response_code(429);
                 return [
                     'status' => 'error',

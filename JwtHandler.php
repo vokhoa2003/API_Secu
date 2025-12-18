@@ -43,7 +43,7 @@ if (!class_exists('JwtHandler')) {
                 "iss" => "API_Security",
                 "aud" => "user",
                 "iat" => time(),
-                "exp" => time() + 30,
+                "exp" => time() + 300,
                 "jti" => bin2hex(random_bytes(16)),
                 "data" =>[
                     "email" => $email,
